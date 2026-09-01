@@ -13,6 +13,7 @@ These rules apply to the whole repository.
 ## User interface and data
 
 - Every user-visible string added or changed must ship in both Spanish and English in the same change. Static SwiftUI keys belong in both `es.lproj/Localizable.strings` and `en.lproj/Localizable.strings`; dynamic copy must use `L10n`.
+- The selected language must apply immediately to the manager, menu bar, settings, alerts, and dynamic status banners. Run the visible-string checker; do not rely on manual catalog inspection.
 - Keep product copy short and user-oriented. Put protocol and implementation detail in the READMEs, not in the interface.
 - Display availability as remaining capacity from 100 to 0. Window countdowns always include seconds and use hours, minutes, and seconds as applicable.
 - Apply active-account `account/rateLimits/updated` pushes immediately. Polling is only a fallback and for inactive accounts; never overwrite a newer push with older data.

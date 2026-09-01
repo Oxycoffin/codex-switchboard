@@ -42,8 +42,37 @@ enum PreciseTime {
     }
 }
 
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system, es, en
+
+    var id: String { rawValue }
+    var locale: Locale {
+        switch self {
+        case .system: return .autoupdatingCurrent
+        case .es: return Locale(identifier: "es")
+        case .en: return Locale(identifier: "en")
+        }
+    }
+    var displayName: String {
+        switch self {
+        case .system: return L10n.text("Sistema", "System")
+        case .es: return "Español"
+        case .en: return "English"
+        }
+    }
+}
+
 enum L10n {
-    static var isEnglish: Bool { Bundle.main.preferredLocalizations.first == "en" }
+    static var language: AppLanguage {
+        AppLanguage(rawValue: UserDefaults.standard.string(forKey: "languagePreference") ?? "system") ?? .system
+    }
+    static var isEnglish: Bool {
+        switch language {
+        case .en: return true
+        case .es: return false
+        case .system: return Locale.preferredLanguages.first?.hasPrefix("en") == true
+        }
+    }
     static func text(_ spanish: String, _ english: String) -> String { isEnglish ? english : spanish }
 }
 
@@ -226,7 +255,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.8"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.9"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -248,7 +277,7 @@ final class AppServerSession {
                     return message["params"] as? [String: Any] ?? [:]
                 }
             }
-            throw SwitchboardError.invalidResponse("tiempo de espera agotado")
+            throw SwitchboardError.invalidResponse(L10n.text("tiempo de espera agotado", "request timed out"))
         }
     }
 
@@ -283,7 +312,7 @@ final class AppServerSession {
                     return message["result"] as? [String: Any] ?? [:]
                 }
             }
-            throw SwitchboardError.invalidResponse("tiempo de espera agotado")
+            throw SwitchboardError.invalidResponse(L10n.text("tiempo de espera agotado", "request timed out"))
         }
     }
 
@@ -306,7 +335,7 @@ final class AppServerSession {
             timeoutLock.lock()
             let timedOut = timeoutTriggered
             timeoutLock.unlock()
-            if timedOut { throw SwitchboardError.invalidResponse("tiempo de espera agotado") }
+            if timedOut { throw SwitchboardError.invalidResponse(L10n.text("tiempo de espera agotado", "request timed out")) }
             throw error
         }
     }
@@ -324,7 +353,7 @@ final class AppServerSession {
             if data.isEmpty { throw SwitchboardError.serverEnded }
             buffer.append(data)
         }
-        throw SwitchboardError.invalidResponse("tiempo de espera agotado")
+        throw SwitchboardError.invalidResponse(L10n.text("tiempo de espera agotado", "request timed out"))
     }
 }
 
@@ -367,7 +396,7 @@ enum CodexBridge {
             "appBrand": "codex"
         ])
         guard let urlText = result["authUrl"] as? String, let url = URL(string: urlText) else {
-            throw SwitchboardError.invalidResponse("Codex no devolvió una URL de acceso")
+            throw SwitchboardError.invalidResponse(L10n.text("Codex no devolvió una URL de acceso", "Codex did not return a sign-in URL"))
         }
         openURL(url)
         let completed = try session.waitForNotification(method: "account/login/completed", timeout: 300)
@@ -387,7 +416,7 @@ enum CodexBridge {
         _ = try probe(home: home, includeRateLimits: false, refreshToken: true)
         let auth = URL(fileURLWithPath: home, isDirectory: true).appendingPathComponent("auth.json")
         guard FileManager.default.fileExists(atPath: auth.path) else {
-            throw SwitchboardError.loginFailed("el perfil de destino no contiene una sesión activa")
+            throw SwitchboardError.loginFailed(L10n.text("el perfil de destino no contiene una sesión activa", "the destination profile does not contain an active session"))
         }
     }
 
@@ -456,7 +485,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.3.8"
+    static let expectedVersion = "0.3.9"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -500,11 +529,11 @@ enum HotBridgeClient {
             if manager.fileExists(atPath: response.path) {
                 let object = try JSONSerialization.jsonObject(with: Data(contentsOf: response)) as? [String: Any] ?? [:]
                 if object["ok"] as? Bool == true { return object }
-                throw SwitchboardError.invalidResponse(object["error"] as? String ?? "el bridge rechazó el cambio")
+                throw SwitchboardError.invalidResponse(object["error"] as? String ?? L10n.text("el bridge rechazó el cambio", "the bridge rejected the switch"))
             }
             Thread.sleep(forTimeInterval: 0.03)
         }
-        throw SwitchboardError.invalidResponse("el bridge no respondió; se conserva el modo seguro")
+        throw SwitchboardError.invalidResponse(L10n.text("el bridge no respondió; se conserva el modo seguro", "the bridge did not respond; safe mode remains active"))
     }
 }
 
@@ -530,6 +559,7 @@ final class SwitchboardStore: ObservableObject {
     @Published var windowPrimingEffort = "low"
     @Published var primingModels: [PrimingModelOption] = []
     @Published var windowPrimingRecords: [String: WindowPrimingRecord] = [:]
+    @Published var languagePreference: AppLanguage
 
     private let manager = FileManager.default
     private var timer: Timer?
@@ -559,6 +589,7 @@ final class SwitchboardStore: ObservableObject {
     private var sharedCodexHome: URL { manager.homeDirectoryForCurrentUser.appendingPathComponent(".codex", isDirectory: true) }
 
     init() {
+        languagePreference = L10n.language
         load()
         refreshWindowPrimingStatus()
         scheduleTimer()
@@ -575,10 +606,21 @@ final class SwitchboardStore: ObservableObject {
         guard let active else { return nil }
         return bestAvailable(excluding: active.id)
     }
+    var interfaceLocale: Locale { languagePreference.locale }
+
+    func setLanguage(_ language: AppLanguage) {
+        UserDefaults.standard.set(language.rawValue, forKey: "languagePreference")
+        languagePreference = language
+        statusMessage = L10n.text("Idioma actualizado.", "Language updated.")
+        ManagerWindowController.shared.updateLanguage(store: self)
+    }
     var forceSwitchMessage: String {
         let names = blockingTaskNames.prefix(3).joined(separator: "\n• ")
         let list = names.isEmpty ? "" : "\n\n• \(names)"
-        return "Codex registra actividad en estas tareas:\(list)\n\nForzar cerrará Codex y puede interrumpir trabajo que aún no se haya guardado."
+        return L10n.text(
+            "Codex registra actividad en estas tareas:\(list)\n\nForzar cerrará Codex y puede interrumpir trabajo que aún no se haya guardado.",
+            "Codex reports activity in these tasks:\(list)\n\nForcing will quit Codex and may interrupt work that has not been saved yet."
+        )
     }
 
     func addProfile(name rawName: String) {
@@ -616,7 +658,7 @@ final class SwitchboardStore: ObservableObject {
             .deletingLastPathComponent().standardizedFileURL
         let allowedRoot = profilesRoot.standardizedFileURL
         guard profileRoot.deletingLastPathComponent() == allowedRoot else {
-            statusMessage = "No se eliminó la cuenta porque su carpeta local no es válida."
+            statusMessage = L10n.text("No se eliminó la cuenta porque su carpeta local no es válida.", "The account was not deleted because its local folder is invalid.")
             return
         }
 
@@ -628,9 +670,9 @@ final class SwitchboardStore: ObservableObject {
             profiles.removeAll { $0.id == profile.id }
             if selectedID == profile.id { selectedID = profiles.first?.id }
             save()
-            statusMessage = "Cuenta eliminada. Su sesión local está en la Papelera; las conversaciones de Codex se conservan."
+            statusMessage = L10n.text("Cuenta eliminada. Su sesión local está en la Papelera; las conversaciones de Codex se conservan.", "Account deleted. Its local session is in Trash; Codex conversations are preserved.")
         } catch {
-            statusMessage = "No se pudo eliminar la cuenta: \(error.localizedDescription)"
+            statusMessage = L10n.text("No se pudo eliminar la cuenta: \(error.localizedDescription)", "Could not delete the account: \(error.localizedDescription)")
         }
     }
 
@@ -645,9 +687,10 @@ final class SwitchboardStore: ObservableObject {
     func setRotationEnabled(_ enabled: Bool, for profile: AccountProfile) {
         guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         profiles[index].isEnabled = enabled
-        recordEvent(kind: "policy", message: enabled
-            ? "\(profile.name) participa en el cambio automático."
-            : "\(profile.name) queda fuera del cambio automático.")
+        statusMessage = enabled
+            ? L10n.text("\(profile.name) participa en el cambio automático.", "\(profile.name) is included in automatic switching.")
+            : L10n.text("\(profile.name) queda fuera del cambio automático.", "\(profile.name) is excluded from automatic switching.")
+        recordEvent(kind: "policy", message: statusMessage ?? "")
         save()
     }
 
@@ -665,16 +708,16 @@ final class SwitchboardStore: ObservableObject {
         seamlessSwitching = enabled
         save()
         statusMessage = enabled
-            ? "El cambio en vivo se usará cuando Codex esté conectado al bridge."
-            : "El cambio en vivo está desactivado; Switchboard usará el cierre seguro."
+            ? L10n.text("El cambio en vivo se usará cuando Codex esté conectado al bridge.", "Live switching will be used when Codex is connected to the bridge.")
+            : L10n.text("El cambio en vivo está desactivado; Switchboard usará el cierre seguro.", "Live switching is off; Switchboard will use the safe restart method.")
     }
 
     func setWindowPrimingEnabled(_ enabled: Bool) {
         windowPrimingEnabled = enabled
         save()
         statusMessage = enabled
-            ? "Preparación de ventanas activada. Funcionará en segundo plano mientras el Mac esté despierto."
-            : "Preparación de ventanas desactivada."
+            ? L10n.text("Preparación de ventanas activada. Funcionará en segundo plano mientras el Mac esté despierto.", "Window preparation enabled. It will run in the background while the Mac is awake.")
+            : L10n.text("Preparación de ventanas desactivada.", "Window preparation disabled.")
     }
 
     func setWindowPrimingModel(_ model: String) {
@@ -763,9 +806,9 @@ final class SwitchboardStore: ObservableObject {
             } else if active.isExhausted {
                 if bestAvailable(excluding: active.id) == nil {
                     waitingForCapacityAccountID = active.id
-                    statusMessage = "Todas las cuentas están agotadas. Switchboard cambiará automáticamente en cuanto alguna recupere uso."
+                    statusMessage = L10n.text("Todas las cuentas están agotadas. Switchboard cambiará automáticamente en cuanto alguna recupere uso.", "All accounts are exhausted. Switchboard will switch automatically as soon as one recovers usage.")
                 } else {
-                    statusMessage = "La disponibilidad marca 0%, pero el backend aún permite uso. No se cambia durante la gracia."
+                    statusMessage = L10n.text("La disponibilidad marca 0%, pero el backend aún permite uso. No se cambia durante la gracia.", "Availability shows 0%, but the backend still allows usage. No switch occurs during the grace period.")
                 }
                 scheduleRotationRetry()
             }
@@ -784,7 +827,7 @@ final class SwitchboardStore: ObservableObject {
             guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
             if let expected = profiles[index].email, let actual = result.email,
                expected.caseInsensitiveCompare(actual) != .orderedSame {
-                throw SwitchboardError.invalidResponse("la sesión aislada pertenece a \(actual), no a \(expected)")
+                throw SwitchboardError.invalidResponse(L10n.text("la sesión aislada pertenece a \(actual), no a \(expected)", "the isolated session belongs to \(actual), not \(expected)"))
             }
             profiles[index].email = result.email
             if let email = result.email, isGenericName(profiles[index].name) {
@@ -817,7 +860,7 @@ final class SwitchboardStore: ObservableObject {
     }
 
     func signIn(_ profile: AccountProfile) {
-        statusMessage = "Completa el acceso de \(profile.name) en el navegador."
+        statusMessage = L10n.text("Completa el acceso de \(profile.name) en el navegador.", "Complete sign-in for \(profile.name) in the browser.")
         Task {
             do {
                 let home = activeID == profile.id ? sharedCodexHome.path : profile.codexHome
@@ -826,7 +869,7 @@ final class SwitchboardStore: ObservableObject {
                         DispatchQueue.main.async { NSWorkspace.shared.open(url) }
                     }
                 }.value
-                statusMessage = "Sesión conectada."
+                statusMessage = L10n.text("Sesión conectada.", "Account connected.")
                 await refresh(profile.id)
             } catch { statusMessage = error.localizedDescription }
         }
@@ -834,7 +877,7 @@ final class SwitchboardStore: ObservableObject {
 
     func signOut(_ profile: AccountProfile) {
         if activeID == profile.id, hasInProgressTurn() {
-            statusMessage = "Hay una tarea en curso. Espera a que termine antes de cerrar la sesión activa."
+            statusMessage = L10n.text("Hay una tarea en curso. Espera a que termine antes de cerrar la sesión activa.", "A task is running. Wait for it to finish before signing out of the active account.")
             return
         }
         Task {
@@ -849,7 +892,7 @@ final class SwitchboardStore: ObservableObject {
                     profiles[index].limitReason = nil
                     save()
                 }
-                statusMessage = "Sesión cerrada en \(profile.name). La cuenta sigue guardada en Switchboard."
+                statusMessage = L10n.text("Sesión cerrada en \(profile.name). La cuenta sigue guardada en Switchboard.", "Signed out of \(profile.name). The account remains saved in Switchboard.")
             } catch { statusMessage = error.localizedDescription }
         }
     }
@@ -883,7 +926,7 @@ final class SwitchboardStore: ObservableObject {
 
     func requestPlanManagement(_ profile: AccountProfile) {
         selectedID = profile.id
-        statusMessage = "Abriendo el perfil aislado de Opera para \(profile.email ?? profile.name)…"
+        statusMessage = L10n.text("Abriendo el perfil aislado de Opera para \(profile.email ?? profile.name)…", "Opening the isolated Opera profile for \(profile.email ?? profile.name)…")
         Task {
             do {
                 let stage = try await Task.detached(priority: .userInitiated) {
@@ -891,9 +934,9 @@ final class SwitchboardStore: ObservableObject {
                 }.value
                 switch stage {
                 case .vpnSetup:
-                    statusMessage = "Activa la VPN en este perfil aislado de Opera y vuelve a pulsar Gestionar plan."
+                    statusMessage = L10n.text("Activa la VPN en este perfil aislado de Opera y vuelve a pulsar Gestionar plan.", "Enable VPN in this isolated Opera profile, then select Manage plan again.")
                 case .billing:
-                    statusMessage = "Perfil aislado abierto para \(profile.email ?? profile.name). Si ChatGPT pide acceso, inicia sesión y entra en Perfil → Ajustes → Billing."
+                    statusMessage = L10n.text("Perfil aislado abierto para \(profile.email ?? profile.name). Si ChatGPT pide acceso, inicia sesión y entra en Perfil → Ajustes → Billing.", "Isolated profile opened for \(profile.email ?? profile.name). If ChatGPT asks you to sign in, do so and open Profile → Settings → Billing.")
                 }
             } catch {
                 statusMessage = error.localizedDescription
@@ -931,8 +974,8 @@ final class SwitchboardStore: ObservableObject {
                 showingForceSwitchWarning = true
             }
             statusMessage = runningTasks.count == 1
-                ? "Codex registra actividad en \(runningTasks[0]). Puedes esperar o forzar el cambio."
-                : "Codex registra \(runningTasks.count) tareas activas. Puedes esperar o forzar el cambio."
+                ? L10n.text("Codex registra actividad en \(runningTasks[0]). Puedes esperar o forzar el cambio.", "Codex reports activity in \(runningTasks[0]). You can wait or force the switch.")
+                : L10n.text("Codex registra \(runningTasks.count) tareas activas. Puedes esperar o forzar el cambio.", "Codex reports \(runningTasks.count) active tasks. You can wait or force the switch.")
             return
         }
 
@@ -945,7 +988,7 @@ final class SwitchboardStore: ObservableObject {
             }
             if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").isEmpty {
                 LifecycleCoordinator.shared.managedCodexRestart = false
-                statusMessage = "Codex sigue ocupado. Cierra la tarea o la aplicación y vuelve a intentarlo."
+                statusMessage = L10n.text("Codex sigue ocupado. Cierra la tarea o la aplicación y vuelve a intentarlo.", "Codex is still busy. Close the task or application and try again.")
                 return
             }
         }
@@ -975,9 +1018,9 @@ final class SwitchboardStore: ObservableObject {
             save()
             await refresh(profile.id)
             statusMessage = automatic
-                ? "Cambio automático a \(profile.name) completado."
-                : "Codex abierto con \(profile.name)."
-            recordEvent(kind: automatic ? "automatic" : "manual", message: statusMessage ?? "Cuenta cambiada.")
+                ? L10n.text("Cambio automático a \(profile.name) completado.", "Automatic switch to \(profile.name) completed.")
+                : L10n.text("Codex abierto con \(profile.name).", "Codex opened with \(profile.name).")
+            recordEvent(kind: automatic ? "automatic" : "manual", message: statusMessage ?? L10n.text("Cuenta cambiada.", "Account switched."))
             save()
         } catch {
             LifecycleCoordinator.shared.managedCodexRestart = false
@@ -988,14 +1031,14 @@ final class SwitchboardStore: ObservableObject {
     private func hotSwitch(_ profile: AccountProfile, automatic: Bool) async -> Bool {
         guard activeID != profile.id else { return true }
         guard manager.fileExists(atPath: URL(fileURLWithPath: profile.codexHome).appendingPathComponent("auth.json").path) else {
-            statusMessage = "Inicia sesión en \(profile.name) antes de usarla."
+            statusMessage = L10n.text("Inicia sesión en \(profile.name) antes de usarla.", "Sign in to \(profile.name) before using it.")
             return true
         }
         let previous = active
         let targetAuth = URL(fileURLWithPath: profile.codexHome, isDirectory: true).appendingPathComponent("auth.json")
         let continuationThread = automatic ? HotBridgeClient.status()?.pendingLimitThreadID : nil
         isRotationInFlight = true
-        statusMessage = "Cambiando en vivo a \(profile.name)…"
+        statusMessage = L10n.text("Cambiando en vivo a \(profile.name)…", "Switching live to \(profile.name)…")
         do {
             try await Task.detached(priority: .userInitiated) {
                 try CodexBridge.prepareHotSwitch(home: profile.codexHome)
@@ -1050,19 +1093,19 @@ final class SwitchboardStore: ObservableObject {
             }
             await refresh(profile.id)
             if let continuationError {
-                statusMessage = "Cuenta cambiada a \(profile.name), pero no se pudo reanudar automáticamente: \(continuationError.localizedDescription)"
+                statusMessage = L10n.text("Cuenta cambiada a \(profile.name), pero no se pudo reanudar automáticamente: \(continuationError.localizedDescription)", "Switched to \(profile.name), but automatic continuation failed: \(continuationError.localizedDescription)")
             } else {
                 statusMessage = automatic
-                    ? "Cuenta cambiada a \(profile.name); la tarea continúa automáticamente."
-                    : "Cuenta cambiada en vivo a \(profile.name)."
+                    ? L10n.text("Cuenta cambiada a \(profile.name); la tarea continúa automáticamente.", "Switched to \(profile.name); the task is continuing automatically.")
+                    : L10n.text("Cuenta cambiada en vivo a \(profile.name).", "Switched live to \(profile.name).")
             }
-            recordEvent(kind: automatic ? "seamless-auto" : "seamless-manual", message: statusMessage ?? "Cambio en vivo completado.")
+            recordEvent(kind: automatic ? "seamless-auto" : "seamless-manual", message: statusMessage ?? L10n.text("Cambio en vivo completado.", "Live switch completed."))
             save()
             isRotationInFlight = false
             return true
         } catch {
-            statusMessage = "El cambio en vivo no está disponible: \(error.localizedDescription). Se comprobará el modo seguro."
-            recordEvent(kind: "bridge-error", message: statusMessage ?? "Falló el bridge.")
+            statusMessage = L10n.text("El cambio en vivo no está disponible: \(error.localizedDescription). Se comprobará el modo seguro.", "Live switching is unavailable: \(error.localizedDescription). The safe method will be checked.")
+            recordEvent(kind: "bridge-error", message: statusMessage ?? L10n.text("Falló el bridge.", "The bridge failed."))
         }
         isRotationInFlight = false
         return false
@@ -1089,7 +1132,7 @@ final class SwitchboardStore: ObservableObject {
         let targetHome = URL(fileURLWithPath: target.codexHome, isDirectory: true)
         let targetAuth = targetHome.appendingPathComponent("auth.json")
         guard manager.fileExists(atPath: targetAuth.path) else {
-            throw SwitchboardError.loginFailed("inicia sesión en \(target.name) antes de usarla")
+            throw SwitchboardError.loginFailed(L10n.text("inicia sesión en \(target.name) antes de usarla", "sign in to \(target.name) before using it"))
         }
 
         let journal = CredentialSwitchJournal(fromID: activeID, toID: target.id, phase: "prepared")
@@ -1246,12 +1289,12 @@ final class SwitchboardStore: ObservableObject {
                     try? manager.moveItem(at: sourceTemp, to: destination)
                 }
             }
-            recordEvent(kind: "recovery", message: "Se completó un cambio de cuenta interrumpido con seguridad.")
+            recordEvent(kind: "recovery", message: L10n.text("Se completó un cambio de cuenta interrumpido con seguridad.", "An interrupted account switch was completed safely."))
         } else if !manager.fileExists(atPath: sharedAuth.path), let sourceTemp,
                   manager.fileExists(atPath: sourceTemp.path) {
             try? manager.moveItem(at: sourceTemp, to: sharedAuth)
             activeID = journal.fromID
-            recordEvent(kind: "recovery", message: "Se restauró la cuenta anterior tras un cambio interrumpido.")
+            recordEvent(kind: "recovery", message: L10n.text("Se restauró la cuenta anterior tras un cambio interrumpido.", "The previous account was restored after an interrupted switch."))
         }
         try? manager.removeItem(at: switchJournalFile)
         save()
@@ -1435,24 +1478,24 @@ final class SwitchboardStore: ObservableObject {
            !active.isExhausted,
            pendingLimitAccountID != active.id {
             waitingForCapacityAccountID = nil
-            statusMessage = "La cuenta activa vuelve a tener uso disponible."
+            statusMessage = L10n.text("La cuenta activa vuelve a tener uso disponible.", "The active account has usage available again.")
             return
         }
         if hasInProgressTurn() && !(seamlessSwitching && HotBridgeClient.status() != nil) {
-            statusMessage = "Hay actividad real en Codex. El cambio automático esperará; el cambio manual permite forzar."
+            statusMessage = L10n.text("Hay actividad real en Codex. El cambio automático esperará; el cambio manual permite forzar.", "Codex has active work. Automatic switching will wait; manual switching can be forced.")
             scheduleRotationRetry()
             return
         }
         guard let next = bestAvailable(excluding: active.id) else {
             waitingForCapacityAccountID = active.id
-            statusMessage = "Todas las cuentas están agotadas. Switchboard cambiará automáticamente en cuanto alguna recupere uso."
+            statusMessage = L10n.text("Todas las cuentas están agotadas. Switchboard cambiará automáticamente en cuanto alguna recupere uso.", "All accounts are exhausted. Switchboard will switch automatically as soon as one recovers usage.")
             return
         }
         waitingForCapacityAccountID = nil
         rotationRetryTask?.cancel()
         rotationRetryTask = nil
         isRotationInFlight = true
-        statusMessage = "Límite confirmado en \(active.name). Cambio automático a \(next.name)."
+        statusMessage = L10n.text("Límite confirmado en \(active.name). Cambio automático a \(next.name).", "Limit confirmed for \(active.name). Automatically switching to \(next.name).")
         await launchSingleInstance(next, automatic: true)
         isRotationInFlight = false
     }
@@ -1470,7 +1513,7 @@ final class SwitchboardStore: ObservableObject {
         let database = sharedCodexHome.appendingPathComponent("thread_history_1.sqlite")
         let stateDatabase = sharedCodexHome.appendingPathComponent("state_5.sqlite")
         guard manager.fileExists(atPath: database.path), manager.fileExists(atPath: stateDatabase.path) else {
-            return ["una tarea cuyo estado no se pudo verificar"]
+            return [L10n.text("una tarea cuyo estado no se pudo verificar", "a task whose state could not be verified")]
         }
         let process = Process()
         let output = Pipe()
@@ -1508,14 +1551,14 @@ final class SwitchboardStore: ObservableObject {
         do {
             try process.run()
             process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return ["una tarea cuyo estado no se pudo verificar"] }
+            guard process.terminationStatus == 0 else { return [L10n.text("una tarea cuyo estado no se pudo verificar", "a task whose state could not be verified")] }
             let data = output.fileHandleForReading.readDataToEndOfFile()
             return (String(data: data, encoding: .utf8) ?? "")
                 .split(whereSeparator: \.isNewline)
                 .map(String.init)
                 .filter { !$0.isEmpty }
         } catch {
-            return ["una tarea cuyo estado no se pudo verificar"]
+            return [L10n.text("una tarea cuyo estado no se pudo verificar", "a task whose state could not be verified")]
         }
     }
 
@@ -1733,8 +1776,8 @@ struct AccountRow: View {
 
     private var storeStatus: String {
         if isActive { return L10n.text("Activa en Codex", "Active in Codex") }
-        if profile.lastError != nil { return "Dato anterior · error al actualizar" }
-        if !profile.isEnabled { return "Fuera del cambio automático" }
+        if profile.lastError != nil { return L10n.text("Dato anterior · error al actualizar", "Previous data · refresh failed") }
+        if !profile.isEnabled { return L10n.text("Fuera del cambio automático", "Excluded from automatic switching") }
         if profile.isExhausted { return L10n.text("Sin uso disponible", "No usage available") }
         return L10n.text("Disponible", "Available")
     }
@@ -1846,17 +1889,17 @@ struct DetailView: View {
             UsageMeter(title: L10n.text("VENTANA CORTA", "SHORT WINDOW"), window: profile.currentPrimary)
             UsageMeter(title: L10n.text("VENTANA SEMANAL", "WEEKLY WINDOW"), window: profile.currentSecondary)
             if let credits = profile.resetCreditsAvailable, credits > 0 {
-                Label("\(credits) reinicio\(credits == 1 ? "" : "s") de límite disponible\(credits == 1 ? "" : "s") en Codex", systemImage: "arrow.counterclockwise.circle.fill")
+                Label(L10n.text("\(credits) reinicio\(credits == 1 ? "" : "s") de límite disponible\(credits == 1 ? "" : "s") en Codex", "\(credits) usage reset\(credits == 1 ? "" : "s") available in Codex"), systemImage: "arrow.counterclockwise.circle.fill")
                     .font(.caption).foregroundStyle(.blue)
             }
             if profile.isBackendBlocked, let reason = profile.limitReason {
                 Text(reason.replacingOccurrences(of: "_", with: " ")).font(.caption).foregroundStyle(.red)
             }
             if let error = profile.lastError {
-                Label("No se pudo actualizar: \(error)", systemImage: "exclamationmark.triangle.fill")
+                Label(L10n.text("No se pudo actualizar: \(error)", "Refresh failed: \(error)"), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange)
                 if let date = profile.lastChecked {
-                    Text("Se conserva el último dato válido de \(relativeSpanish(date)). Esta cuenta no se usará como destino automático hasta verificarla.")
+                    Text(L10n.text("Se conserva el último dato válido de \(relativeSpanish(date)). Esta cuenta no se usará como destino automático hasta verificarla.", "The last valid data from \(relativeSpanish(date)) is preserved. This account will not be selected automatically until verified."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -1885,8 +1928,8 @@ struct DetailView: View {
                 )).labelsHidden()
             }
             Text(profile.isEnabled
-                 ? "Esta cuenta puede ser elegida cuando otra se quede sin uso."
-                 : "Esta cuenta nunca se elegirá automáticamente; el cambio manual sigue disponible.")
+                 ? L10n.text("Esta cuenta puede ser elegida cuando otra se quede sin uso.", "This account can be selected when another runs out of usage.")
+                 : L10n.text("Esta cuenta nunca se elegirá automáticamente; el cambio manual sigue disponible.", "This account will never be selected automatically; manual switching remains available."))
                 .font(.callout).foregroundStyle(.secondary)
             if store.activeID == profile.id, let next = store.recommendedNext {
                 Label("\(L10n.text("Siguiente opción", "Next option")): \(next.name) · 5 h \(next.shortRemaining.map(String.init) ?? "—")% · \(L10n.text("semana", "week")) \(next.weeklyRemaining.map(String.init) ?? "—")%", systemImage: "sparkles")
@@ -1899,10 +1942,10 @@ struct DetailView: View {
                         Label("Cambio sin cerrar Codex", systemImage: "bolt.horizontal.circle")
                             .font(.subheadline.weight(.semibold))
                         Text(store.bridgeConnected
-                             ? "Bridge conectado · las tareas pueden continuar entre cuentas."
+                             ? L10n.text("Bridge conectado · las tareas pueden continuar entre cuentas.", "Bridge connected · tasks can continue across accounts.")
                              : store.bridgeVersion != nil
-                                ? "Hay una versión anterior del bridge activa · reinicia Codex para cargar la corrección instalada."
-                                : "Se activará en el próximo inicio gestionado de Codex.")
+                                ? L10n.text("Hay una versión anterior del bridge activa · reinicia Codex para cargar la corrección instalada.", "An older bridge is active · restart Codex to load the installed fix.")
+                                : L10n.text("Se activará en el próximo inicio gestionado de Codex.", "It will activate on the next managed Codex launch."))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -2004,7 +2047,7 @@ struct DetailView: View {
             HStack {
                 Text("Cambio en vivo")
                 Spacer()
-                Label(store.bridgeConnected ? "Conectado" : store.bridgeVersion != nil ? "Reinicio necesario" : "En espera",
+                Label(store.bridgeConnected ? L10n.text("Conectado", "Connected") : store.bridgeVersion != nil ? L10n.text("Reinicio necesario", "Restart required") : L10n.text("En espera", "Waiting"),
                       systemImage: store.bridgeConnected ? "checkmark.circle.fill" : store.bridgeVersion != nil ? "arrow.clockwise.circle" : "clock")
                     .font(.caption)
                     .foregroundStyle(store.bridgeConnected ? .green : .secondary)
@@ -2028,12 +2071,13 @@ struct DetailView: View {
     }
 
     private func localizedEventMessage(_ event: SwitchEvent) -> String {
-        guard L10n.isEnglish else { return event.message }
         switch event.kind {
-        case "automatic": return "Automatic account switch completed."
-        case "manual": return "Account switch completed."
-        case "recovery": return "Account state recovered."
-        default: return "Switchboard status updated."
+        case "automatic", "seamless-auto": return L10n.text("Cambio automático completado.", "Automatic account switch completed.")
+        case "manual", "seamless-manual": return L10n.text("Cambio de cuenta completado.", "Account switch completed.")
+        case "recovery": return L10n.text("Estado de la cuenta recuperado.", "Account state recovered.")
+        case "policy": return L10n.text("Preferencia de cambio automático actualizada.", "Automatic switching preference updated.")
+        case "bridge-error": return L10n.text("El cambio en vivo encontró un error.", "Live switching encountered an error.")
+        default: return L10n.text("Estado de Switchboard actualizado.", "Switchboard status updated.")
         }
     }
 
@@ -2096,7 +2140,7 @@ private extension View {
 struct ContentView: View {
     @ObservedObject var store: SwitchboardStore
     @State private var showingAdd = false
-    @State private var newName = "Cuenta 2"
+    @State private var newName = L10n.text("Cuenta 2", "Account 2")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2120,7 +2164,7 @@ struct ContentView: View {
                     Toggle(isOn: Binding(get: { store.automaticRotation }, set: store.setAutomaticRotation)) {
                         Label("Cambio automático", systemImage: "wand.and.stars")
                     }.toggleStyle(.switch).fixedSize(horizontal: false, vertical: true)
-                    Button { newName = "Cuenta \(store.profiles.count + 1)"; showingAdd = true } label: {
+                    Button { newName = L10n.text("Cuenta \(store.profiles.count + 1)", "Account \(store.profiles.count + 1)"); showingAdd = true } label: {
                         Label("Añadir cuenta", systemImage: "plus").frame(maxWidth: .infinity)
                     }.buttonStyle(.bordered)
                 }.padding(14).background(.bar)
@@ -2144,8 +2188,8 @@ struct ContentView: View {
             Button("Activar") { store.confirmAutomaticRotation() }
         } message: {
             Text(store.seamlessSwitching
-                 ? "Cuando el bridge esté conectado, Switchboard cambiará la autenticación en memoria y continuará la tarea sin cerrar Codex. Si una actualización rompe la compatibilidad, volverá al cierre seguro y nunca forzará una tarea activa."
-                 : "Cuando una cuenta se agote, Switchboard esperará a que no haya trabajo activo, cerrará Codex y lo abrirá con otra cuenta.")
+                 ? L10n.text("Cuando el bridge esté conectado, Switchboard cambiará la autenticación en memoria y continuará la tarea sin cerrar Codex. Si una actualización rompe la compatibilidad, volverá al cierre seguro y nunca forzará una tarea activa.", "When the bridge is connected, Switchboard changes authentication in memory and continues the task without quitting Codex. If an update breaks compatibility, it falls back to safe restart and never forces an active task.")
+                 : L10n.text("Cuando una cuenta se agote, Switchboard esperará a que no haya trabajo activo, cerrará Codex y lo abrirá con otra cuenta.", "When an account is exhausted, Switchboard waits until no work is active, quits Codex, and opens it with another account."))
         }
         .alert("Hay actividad en Codex", isPresented: $store.showingForceSwitchWarning) {
             Button("Cancelar", role: .cancel) { store.cancelForcedSwitch() }
@@ -2179,8 +2223,8 @@ enum OperaPlanError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missing: return "Opera no está instalado en /Applications/Opera.app."
-        case .launch(let message): return "No se pudo abrir el perfil aislado de Opera: \(message)"
+        case .missing: return L10n.text("Opera no está instalado en /Applications/Opera.app.", "Opera is not installed at /Applications/Opera.app.")
+        case .launch(let message): return L10n.text("No se pudo abrir el perfil aislado de Opera: \(message)", "Could not open the isolated Opera profile: \(message)")
         }
     }
 }
@@ -2348,7 +2392,7 @@ final class ManagerWindowController: NSObject, NSWindowDelegate {
 
     func show(store: SwitchboardStore) {
         if window == nil {
-            let controller = NSHostingController(rootView: ContentView(store: store))
+            let controller = NSHostingController(rootView: managerRoot(store: store))
             let created = NSWindow(contentViewController: controller)
             created.title = ""
             created.setContentSize(NSSize(width: 1120, height: 760))
@@ -2367,6 +2411,15 @@ final class ManagerWindowController: NSObject, NSWindowDelegate {
         if let active = store.active {
             Task { await store.refresh(active.id) }
         }
+    }
+
+    func updateLanguage(store: SwitchboardStore) {
+        guard let controller = window?.contentViewController as? NSHostingController<AnyView> else { return }
+        controller.rootView = managerRoot(store: store)
+    }
+
+    private func managerRoot(store: SwitchboardStore) -> AnyView {
+        AnyView(ContentView(store: store).environment(\.locale, store.interfaceLocale))
     }
 
     private func normalizeWindowFrame() {
@@ -2443,14 +2496,14 @@ struct CodexSwitchboardApp: App {
                 .keyboardShortcut("g")
             Divider()
             if let active = store.active {
-                Text("Activa: \(active.email ?? active.name) · \(active.planDisplayName)")
+                Text(L10n.text("Activa: \(active.email ?? active.name) · \(active.planDisplayName)", "Active: \(active.email ?? active.name) · \(active.planDisplayName)"))
                 Divider()
                 quotaMenuLine("5 horas", window: active.currentPrimary)
                 quotaMenuLine("Semanal", window: active.currentSecondary)
                 if let next = store.recommendedNext {
-                    Text("Siguiente automática: \(next.name)")
+                    Text(L10n.text("Siguiente automática: \(next.name)", "Next automatic: \(next.name)"))
                 }
-                Button("Gestionar plan de \(active.name) en Opera…") {
+                Button(L10n.text("Gestionar plan de \(active.name) en Opera…", "Manage \(active.name)'s plan in Opera…")) {
                     store.requestPlanManagement(active)
                 }
                 .disabled(!active.isSignedIn)
@@ -2481,7 +2534,8 @@ struct CodexSwitchboardApp: App {
             Image(nsImage: MenuBarIcon.image)
                 .accessibilityLabel("Codex Switchboard")
         }
-        Settings { SettingsView() }
+        .environment(\.locale, store.interfaceLocale)
+        Settings { SettingsView(store: store).environment(\.locale, store.interfaceLocale) }
     }
 
     @ViewBuilder
@@ -2509,17 +2563,53 @@ struct CodexSwitchboardApp: App {
 }
 
 struct SettingsView: View {
+    @ObservedObject var store: SwitchboardStore
+
     var body: some View {
         Form {
+            Section("General") {
+                Picker("Idioma", selection: Binding(
+                    get: { store.languagePreference },
+                    set: store.setLanguage
+                )) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.displayName).tag(language)
+                    }
+                }
+                Toggle("Cambio automático", isOn: Binding(
+                    get: { store.automaticRotation },
+                    set: store.setAutomaticRotation
+                ))
+                Toggle("Cambio sin cerrar Codex", isOn: Binding(
+                    get: { store.seamlessSwitching },
+                    set: store.setSeamlessSwitching
+                ))
+                Toggle("Preparar ventanas de 5 h", isOn: Binding(
+                    get: { store.windowPrimingEnabled },
+                    set: store.setWindowPrimingEnabled
+                ))
+            }
             Section("Privacidad") {
                 Label("Los perfiles viven en Application Support con permisos 0700.", systemImage: "lock.fill")
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("Switchboard nunca muestra el contenido de auth.json. Con Codex cerrado, mueve atómicamente el archivo entre almacenes privados para activar la cuenta elegida.")
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("Compatibilidad") {
                 Text("Si OpenAI cambia el protocolo de cuenta o límites, el monitor mostrará un error y no intentará modificar credenciales.")
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        }.padding(24).frame(width: 520)
+        }
+        .formStyle(.grouped)
+        .padding(20)
+        .frame(width: 620, height: 520)
+        .alert("Activar cambio automático", isPresented: $store.showingAutoRotationWarning) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Activar") { store.confirmAutomaticRotation() }
+        } message: {
+            Text("Switchboard cambiará de cuenta cuando Codex confirme que no queda uso.")
+        }
     }
 }
