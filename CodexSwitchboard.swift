@@ -218,7 +218,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.5"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.6"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -448,7 +448,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.3.5"
+    static let expectedVersion = "0.3.6"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -1706,9 +1706,17 @@ struct AccountRow: View {
                 HStack(spacing: 6) {
                     Text(storeStatus)
                         .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
-                    Spacer(minLength: 4)
-                    if profile.hasReliableQuota, !profile.isExhausted {
-                        Text(quotaSummary).font(.caption2.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                if profile.hasReliableQuota, !profile.isExhausted {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(windowSummary("5 h", window: profile.currentPrimary, now: context.date))
+                            Text(windowSummary(L10n.text("S", "W"), window: profile.currentSecondary, now: context.date))
+                        }
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     }
                 }
             }
@@ -1726,10 +1734,12 @@ struct AccountRow: View {
         return L10n.text("Disponible", "Available")
     }
 
-    private var quotaSummary: String {
-        let short = profile.shortRemaining.map(String.init) ?? "—"
-        let week = profile.weeklyRemaining.map(String.init) ?? "—"
-        return "5 h \(short)% · \(L10n.text("S", "W")) \(week)%"
+    private func windowSummary(_ title: String, window: UsageWindow?, now: Date) -> String {
+        guard let window else { return "\(title) —" }
+        let current = window.current(at: now)
+        let remaining = max(0, 100 - current.usedPercent)
+        guard let reset = current.resetsAt else { return "\(title) \(remaining)%" }
+        return "\(title) \(remaining)% · \(PreciseTime.remaining(until: reset, now: now))"
     }
 }
 
@@ -1985,7 +1995,7 @@ struct DetailView: View {
     }
 
     private var integrationDisplay: String {
-        guard let raw = store.integrationVersion else { return "Comprobando…" }
+        guard let raw = store.integrationVersion else { return L10n.text("Comprobando…", "Checking…") }
         let first = raw.split(separator: " ").first.map(String.init) ?? raw
         if let slash = first.firstIndex(of: "/") {
             return "Codex " + first[first.index(after: slash)...]
