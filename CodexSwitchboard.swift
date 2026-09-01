@@ -32,6 +32,14 @@ enum PreciseTime {
         if minutes > 0 { return String(format: "%d min %02d s", minutes, seconds) }
         return "\(seconds) s"
     }
+
+    static func compactRemaining(until date: Date, now: Date = Date()) -> String {
+        let totalMinutes = max(1, Int(ceil(date.timeIntervalSince(now) / 60)))
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        if hours > 0 { return String(format: "%d h %02d min", hours, minutes) }
+        return "\(minutes) min"
+    }
 }
 
 enum L10n {
@@ -218,7 +226,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.6"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.7"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -448,7 +456,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.3.6"
+    static let expectedVersion = "0.3.7"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -1709,14 +1717,11 @@ struct AccountRow: View {
                     Spacer(minLength: 0)
                 }
                 if profile.hasReliableQuota, !profile.isExhausted {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(windowSummary("5 h", window: profile.currentPrimary, now: context.date))
-                            Text(windowSummary(L10n.text("S", "W"), window: profile.currentSecondary, now: context.date))
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        HStack(alignment: .top, spacing: 14) {
+                            SidebarQuotaMetric(title: "5 H", window: profile.currentPrimary, now: context.date)
+                            SidebarQuotaMetric(title: L10n.text("SEMANA", "WEEK"), window: profile.currentSecondary, now: context.date)
                         }
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
                     }
                 }
             }
@@ -1734,12 +1739,31 @@ struct AccountRow: View {
         return L10n.text("Disponible", "Available")
     }
 
-    private func windowSummary(_ title: String, window: UsageWindow?, now: Date) -> String {
-        guard let window else { return "\(title) —" }
-        let current = window.current(at: now)
-        let remaining = max(0, 100 - current.usedPercent)
-        guard let reset = current.resetsAt else { return "\(title) \(remaining)%" }
-        return "\(title) \(remaining)% · \(PreciseTime.remaining(until: reset, now: now))"
+}
+
+private struct SidebarQuotaMetric: View {
+    let title: String
+    let window: UsageWindow?
+    let now: Date
+
+    var body: some View {
+        let current = window?.current(at: now)
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.tertiary)
+            Text(current.map { "\(max(0, 100 - $0.usedPercent))%" } ?? "—")
+                .font(.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.primary)
+            if let reset = current?.resetsAt {
+                Label(PreciseTime.compactRemaining(until: reset, now: now), systemImage: "clock")
+                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .labelStyle(.titleAndIcon)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .lineLimit(1)
     }
 }
 
