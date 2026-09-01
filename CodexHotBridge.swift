@@ -111,7 +111,7 @@ private final class HotBridge {
         status = BridgeStatus(
             pid: ProcessInfo.processInfo.processIdentifier,
             ready: false,
-            version: "0.3.4",
+            version: "0.3.5",
             startedAt: Date(),
             updatedAt: Date(),
             activeThreadID: nil,
@@ -684,7 +684,7 @@ private final class MiniAppServer {
 
     func initialize() throws {
         _ = try request(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard-bridge", "title": "Codex Switchboard Bridge", "version": "0.3.4"],
+            "clientInfo": ["name": "codex-switchboard-bridge", "title": "Codex Switchboard Bridge", "version": "0.3.5"],
             "capabilities": ["experimentalApi": true]
         ], timeout: 5)
         try write(["method": "initialized"])

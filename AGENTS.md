@@ -17,6 +17,7 @@ These rules apply to the whole repository.
 - Display availability as remaining capacity from 100 to 0. Window countdowns always include seconds and use hours, minutes, and seconds as applicable.
 - Apply active-account `account/rateLimits/updated` pushes immediately. Polling is only a fallback and for inactive accounts; never overwrite a newer push with older data.
 - Layout changes must be checked at the minimum supported window size in both languages. No clipped, overlapping, or scrolling header content.
+- Never place `TimelineView`, a per-second publisher, or another continuously invalidating view inside `MenuBarExtra`; macOS 26 can recurse through menu graph updates and crash. Use a precise snapshot in the menu and keep live ticking in the manager window.
 
 ## Required checks
 

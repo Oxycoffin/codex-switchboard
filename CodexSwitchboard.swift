@@ -218,7 +218,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.4"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.5"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -448,7 +448,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.3.4"
+    static let expectedVersion = "0.3.5"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -2452,18 +2452,17 @@ struct CodexSwitchboardApp: App {
 
     @ViewBuilder
     private func quotaMenuLine(_ title: String, window: UsageWindow?) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            if let window {
-                let current = window.current(at: context.date)
-                let remaining = max(0, 100 - current.usedPercent)
-                if let reset = current.resetsAt {
-                    Text("\(title): \(remaining)% \(L10n.text("disponible", "available")) · \(PreciseTime.remaining(until: reset, now: context.date))")
-                } else {
-                    Text("\(title): \(remaining)% \(L10n.text("disponible", "available"))")
-                }
+        if let window {
+            let now = Date()
+            let current = window.current(at: now)
+            let remaining = max(0, 100 - current.usedPercent)
+            if let reset = current.resetsAt {
+                Text("\(title): \(remaining)% \(L10n.text("disponible", "available")) · \(PreciseTime.remaining(until: reset, now: now))")
             } else {
-                Text("\(title): \(L10n.text("sin datos", "no data"))")
+                Text("\(title): \(remaining)% \(L10n.text("disponible", "available"))")
             }
+        } else {
+            Text("\(title): \(L10n.text("sin datos", "no data"))")
         }
     }
 

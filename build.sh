@@ -31,6 +31,7 @@ verify_copied_bundle() {
 
 mkdir -p "$source_root" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$app_dir/Contents/Helpers"
 node "$project_dir/scripts/check-localizations.js"
+node "$project_dir/scripts/check-menu-safety.js"
 for source in CodexSwitchboard.swift Pulse.swift CodexHotBridge.swift make_icon.swift Info.plist; do
   cp "$project_dir/$source" "$source_root/$source"
 done
