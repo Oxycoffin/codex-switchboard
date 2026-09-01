@@ -226,7 +226,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.7"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.8"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -456,7 +456,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.3.7"
+    static let expectedVersion = "0.3.8"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -1716,7 +1716,7 @@ struct AccountRow: View {
                         .font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                     Spacer(minLength: 0)
                 }
-                if profile.hasReliableQuota, !profile.isExhausted {
+                if profile.hasReliableQuota {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         HStack(alignment: .top, spacing: 14) {
                             SidebarQuotaMetric(title: "5 H", window: profile.currentPrimary, now: context.date)

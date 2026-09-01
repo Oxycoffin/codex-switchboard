@@ -37,7 +37,7 @@ Install locally with `./install.sh`.
 
 ## Compatibility
 
-Version 0.3.7 is validated against the local Codex 0.151.0-alpha.7.2 protocol. The bridge regression test covers external authentication, token refresh, live usage notifications, continuation, and delayed limit events attributed to the originating account. Auxiliary Codex hosts pass through to the official binary and cannot claim the primary control channel. The menu bar uses a precise snapshot to avoid the SwiftUI recursion caused by `TimelineView` inside `MenuBarExtra` on macOS 26. The detail view keeps exact seconds; the account list separates each window, emphasizes availability, and summarizes resets with hours and minutes only.
+Version 0.3.8 is validated against the local Codex 0.151.0-alpha.7.2 protocol. The bridge regression test covers external authentication, token refresh, live usage notifications, continuation, and delayed limit events attributed to the originating account. Auxiliary Codex hosts pass through to the official binary and cannot claim the primary control channel. The menu bar uses a precise snapshot to avoid the SwiftUI recursion caused by `TimelineView` inside `MenuBarExtra` on macOS 26. The detail view keeps exact seconds; the account list separates each window, emphasizes availability, and summarizes resets with hours and minutes only, including exhausted accounts.
 
 ## Contributing
 

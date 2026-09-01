@@ -63,7 +63,7 @@ Los scripts reutilizan una identidad `Apple Development` disponible para mantene
 
 ## Compatibilidad
 
-La versión 0.3.7 se verificó con el protocolo local de Codex 0.151.0-alpha.7.2. Las pruebas del bridge cubren negociación, autenticación externa, multiplexado, renovación, actualizaciones inmediatas de cuota y avisos tardíos de límite ligados a su cuenta de origen. Los hosts auxiliares de Codex pasan directamente al binario oficial y no pueden reclamar el canal de control principal. El menú superior usa una instantánea precisa para evitar la recursión de SwiftUI que provoca `TimelineView` dentro de `MenuBarExtra` en macOS 26. La ficha mantiene segundos exactos; la lista lateral separa visualmente cada ventana, destaca el porcentaje y resume su reinicio solo con horas y minutos.
+La versión 0.3.8 se verificó con el protocolo local de Codex 0.151.0-alpha.7.2. Las pruebas del bridge cubren negociación, autenticación externa, multiplexado, renovación, actualizaciones inmediatas de cuota y avisos tardíos de límite ligados a su cuenta de origen. Los hosts auxiliares de Codex pasan directamente al binario oficial y no pueden reclamar el canal de control principal. El menú superior usa una instantánea precisa para evitar la recursión de SwiftUI que provoca `TimelineView` dentro de `MenuBarExtra` en macOS 26. La ficha mantiene segundos exactos; la lista lateral separa visualmente cada ventana, destaca el porcentaje y resume su reinicio solo con horas y minutos, también cuando la cuenta está agotada.
 
 ## Idiomas y contribución
 
