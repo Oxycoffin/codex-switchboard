@@ -29,7 +29,7 @@ verify_copied_bundle() {
   codesign --verify --deep --strict --verbose=2 "$bundle"
 }
 
-mkdir -p "$source_root" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$app_dir/Contents/Helpers"
+mkdir -p "$build_dir" "$source_root" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" "$app_dir/Contents/Helpers"
 node "$project_dir/scripts/check-localizations.js"
 node "$project_dir/scripts/check-visible-localizations.js"
 node "$project_dir/scripts/check-menu-safety.js"
