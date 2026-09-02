@@ -4,6 +4,9 @@
 
 [Leer en español](README.es.md)
 
+> [!IMPORTANT]
+> Codex Switchboard is an independent, unofficial project. It is not affiliated with or endorsed by OpenAI. Users are responsible for complying with the terms that apply to every connected account and must not use Switchboard to share credentials or circumvent service restrictions.
+
 Codex Switchboard keeps your paid accounts ready, shows how much usage each one has left, and moves Codex to an available account when the current one reaches its limit. Your tasks, projects, and conversation history stay together in the official Codex app.
 
 ## What it gives you
@@ -41,11 +44,11 @@ The account currently used by Codex is always identified. Availability is shown 
 
 All account profiles stay on this Mac under `~/Library/Application Support/Codex Switchboard` with private filesystem permissions. Switchboard never asks for a password and does not store tokens in logs, commands, the UI, or this repository. It does not copy or index conversation content.
 
-Billing browser profiles are isolated per account. They do not share cookies or history with each other or with your everyday browser profile.
+Billing browser profiles are isolated per account. Choose the built-in WebKit browser (Safari's engine), Google Chrome, Microsoft Edge, Brave, Vivaldi, or Opera from Settings; each browser and account gets separate local storage. The Safari app itself is not automated because macOS does not expose a reliable public way to target a particular Safari profile. Opera's built-in VPN preparation is optional and appears only when Opera is selected.
 
 ## Installation
 
-Codex Switchboard currently targets macOS 14 or later and is distributed from source while the repository is private.
+Codex Switchboard currently targets macOS 14 or later and is distributed from source. Published source builds are not notarized by Apple.
 
 ```zsh
 chmod +x build.sh install.sh
@@ -64,3 +67,5 @@ The interface is available in English and Spanish. It can follow macOS automatic
 Start with [Architecture](docs/ARCHITECTURE.md) for the process and data model, then read [Contributing](CONTRIBUTING.md) before changing the app. Repository-wide product and localization rules live in [AGENTS.md](AGENTS.md).
 
 The official Codex app must remain untouched, account secrets must never be exposed, and every user-visible change must work in both English and Spanish.
+
+Codex Switchboard is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE). You may use, study, modify, and redistribute it for noncommercial purposes. Commercial use, sale, and sublicensing are not permitted. See the [Changelog](CHANGELOG.md), [Security](SECURITY.md), [Support](SUPPORT.md), and the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.

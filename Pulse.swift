@@ -188,7 +188,7 @@ private final class WindowPrimingCoordinator {
     private func run() {
         guard let data = try? Data(contentsOf: stateFile),
               let state = try? JSONDecoder().decode(PulseState.self, from: data),
-              state.windowPrimingEnabled ?? true else { return }
+              state.windowPrimingEnabled ?? false else { return }
         let model = normalized(state.windowPrimingModel) ?? "gpt-5.6-luna"
         let effort = normalized(state.windowPrimingEffort) ?? "low"
         var ledger = loadLedger()

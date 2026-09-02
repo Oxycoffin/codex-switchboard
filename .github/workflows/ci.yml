@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scripts and property lists
+        shell: zsh {0}
+        run: |
+          zsh -n build.sh install.sh
+          for file in scripts/*.js tests/*.js experiments/*.js; do node --check "$file"; done
+          plutil -lint Info.plist local.codex.switchboard.pulse.plist
+      - name: Test usage-window classification
+        run: |
+          swiftc UsageWindows.swift tests/test-usage-windows.swift -o /tmp/codex-switchboard-window-tests
+          /tmp/codex-switchboard-window-tests
+      - name: Test browser-profile isolation
+        run: |
+          swiftc BrowserProfiles.swift tests/test-browser-profiles.swift -o /tmp/codex-switchboard-browser-tests
+          /tmp/codex-switchboard-browser-tests
+      - name: Build signed app bundle
+        run: ./build.sh
+      - name: Test bridge protocol
+        run: |
+          node tests/test-hot-bridge.js "build/Codex Switchboard.app/Contents/Helpers/CodexHotBridge" tests/fake-codex.js
+          node tests/test-auxiliary-passthrough.js "build/Codex Switchboard.app/Contents/Helpers/CodexHotBridge" tests/fake-codex.js

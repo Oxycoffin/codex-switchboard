@@ -11,7 +11,7 @@
 "Añadir cuenta" = "Añadir cuenta";
 "Cuenta activa" = "Cuenta activa";
 "Actualizar cuota" = "Actualizar cuota";
-"Gestionar plan en Opera" = "Gestionar plan en Opera";
+"Gestionar plan" = "Gestionar plan";
 "Cerrar sesión" = "Cerrar sesión";
 "Eliminar cuenta" = "Eliminar cuenta";
 "VENTANA CORTA" = "VENTANA CORTA";
@@ -65,7 +65,11 @@
 "Después podrás iniciar sesión de forma independiente." = "Después podrás iniciar sesión de forma independiente.";
 "Hay actividad en Codex" = "Hay actividad en Codex";
 "Renombrar" = "Renombrar";
-"Gestionar plan en Opera…" = "Gestionar plan en Opera…";
+"Gestionar plan…" = "Gestionar plan…";
+"Facturación" = "Facturación";
+"Navegador de facturación" = "Navegador de facturación";
+"Usar la VPN integrada de Opera" = "Usar la VPN integrada de Opera";
+"Cada cuenta utiliza un perfil separado del navegador elegido. Sus cookies e inicios de sesión no se comparten con otras cuentas ni con tu perfil habitual." = "Cada cuenta utiliza un perfil separado del navegador elegido. Sus cookies e inicios de sesión no se comparten con otras cuentas ni con tu perfil habitual.";
 "Abrir carpeta del perfil" = "Abrir carpeta del perfil";
 "Iniciar sesión" = "Iniciar sesión";
 "La carpeta de esta cuenta, incluida su sesión local, se moverá a la Papelera. Las conversaciones compartidas de Codex no se borrarán." = "La carpeta de esta cuenta, incluida su sesión local, se moverá a la Papelera. Las conversaciones compartidas de Codex no se borrarán.";

@@ -33,7 +33,7 @@ mkdir -p "$source_root" "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources" 
 node "$project_dir/scripts/check-localizations.js"
 node "$project_dir/scripts/check-visible-localizations.js"
 node "$project_dir/scripts/check-menu-safety.js"
-for source in CodexSwitchboard.swift UsageWindows.swift Pulse.swift CodexHotBridge.swift make_icon.swift Info.plist; do
+for source in CodexSwitchboard.swift UsageWindows.swift BrowserProfiles.swift Pulse.swift CodexHotBridge.swift make_icon.swift Info.plist; do
   cp "$project_dir/$source" "$source_root/$source"
 done
 cp "$project_dir/Info.plist" "$app_dir/Contents/Info.plist"
@@ -52,8 +52,9 @@ sips -z 512 512 "$build_dir/icon-1024.png" --out "$iconset/icon_256x256@2x.png" 
 sips -z 512 512 "$build_dir/icon-1024.png" --out "$iconset/icon_512x512.png" >/dev/null
 cp "$build_dir/icon-1024.png" "$iconset/icon_512x512@2x.png"
 iconutil -c icns "$iconset" -o "$app_dir/Contents/Resources/CodexSwitchboard.icns"
-swiftc -parse-as-library -O -framework SwiftUI -framework AppKit \
+swiftc -parse-as-library -O -framework SwiftUI -framework AppKit -framework WebKit \
   "$source_root/UsageWindows.swift" \
+  "$source_root/BrowserProfiles.swift" \
   "$source_root/CodexSwitchboard.swift" \
   -o "$app_dir/Contents/MacOS/CodexSwitchboard"
 swiftc -O -framework AppKit "$source_root/Pulse.swift" \

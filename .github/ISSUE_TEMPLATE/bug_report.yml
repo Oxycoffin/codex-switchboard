@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible problem in Codex Switchboard
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach credentials, auth.json, cookies, tokens, browser profiles, conversation databases, or unredacted account screenshots.
+  - type: input
+    id: version
+    attributes:
+      label: Switchboard version
+      placeholder: 0.4.0
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS and Codex versions
+      placeholder: macOS 15.x, Codex x.y
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Explain the observed result and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Open…\n2. Select…\n3. Observe…"
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics
+      description: Include only information you have checked for secrets and personal data.
+      render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed credentials, tokens, cookies, account files, personal data, and conversation content.
+          required: true

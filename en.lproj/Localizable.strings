@@ -11,7 +11,7 @@
 "Añadir cuenta" = "Add account";
 "Cuenta activa" = "Active account";
 "Actualizar cuota" = "Refresh usage";
-"Gestionar plan en Opera" = "Manage plan in Opera";
+"Gestionar plan" = "Manage plan";
 "Cerrar sesión" = "Sign out";
 "Eliminar cuenta" = "Delete account";
 "VENTANA CORTA" = "SHORT WINDOW";
@@ -65,7 +65,11 @@
 "Después podrás iniciar sesión de forma independiente." = "You can then sign in independently.";
 "Hay actividad en Codex" = "Codex is active";
 "Renombrar" = "Rename";
-"Gestionar plan en Opera…" = "Manage plan in Opera…";
+"Gestionar plan…" = "Manage plan…";
+"Facturación" = "Billing";
+"Navegador de facturación" = "Billing browser";
+"Usar la VPN integrada de Opera" = "Use Opera's built-in VPN";
+"Cada cuenta utiliza un perfil separado del navegador elegido. Sus cookies e inicios de sesión no se comparten con otras cuentas ni con tu perfil habitual." = "Each account uses a separate profile in the selected browser. Cookies and sign-ins are not shared with other accounts or your everyday profile.";
 "Abrir carpeta del perfil" = "Open profile folder";
 "Iniciar sesión" = "Sign in";
 "La carpeta de esta cuenta, incluida su sesión local, se moverá a la Papelera. Las conversaciones compartidas de Codex no se borrarán." = "This account folder, including its local session, will be moved to Trash. Shared Codex conversations will not be deleted.";

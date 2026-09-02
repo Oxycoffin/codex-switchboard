@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 import Foundation
 import SwiftUI
+import WebKit
 
 @MainActor
 final class LifecycleCoordinator {
@@ -155,6 +156,8 @@ struct PersistedState: Codable {
     var windowPrimingEnabled: Bool?
     var windowPrimingModel: String?
     var windowPrimingEffort: String?
+    var billingBrowser: String?
+    var operaVPNForBilling: Bool?
 }
 
 struct ProbeResult {
@@ -245,7 +248,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.4.0"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.4.1"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -482,7 +485,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.4.0"
+    static let expectedVersion = "0.4.1"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -551,12 +554,14 @@ final class SwitchboardStore: ObservableObject {
     @Published var blockingTaskNames: [String] = []
     @Published var events: [SwitchEvent] = []
     @Published var integrationVersion: String?
-    @Published var windowPrimingEnabled = true
+    @Published var windowPrimingEnabled = false
     @Published var windowPrimingModel = "gpt-5.6-luna"
     @Published var windowPrimingEffort = "low"
     @Published var primingModels: [PrimingModelOption] = []
     @Published var windowPrimingRecords: [String: WindowPrimingRecord] = [:]
     @Published var languagePreference: AppLanguage
+    @Published var billingBrowser = BillingBrowser.recommended
+    @Published var operaVPNForBilling = false
 
     private let manager = FileManager.default
     private var timer: Timer?
@@ -626,18 +631,19 @@ final class SwitchboardStore: ObservableObject {
         let id = UUID()
         let root = profilesRoot.appendingPathComponent(id.uuidString, isDirectory: true)
         let home = root.appendingPathComponent("Account", isDirectory: true)
-        let browser = root.appendingPathComponent("Opera", isDirectory: true)
+        let browserProfiles = root.appendingPathComponent("Browsers", isDirectory: true)
+        let legacyOpera = root.appendingPathComponent("Opera", isDirectory: true)
         do {
             try secureDirectory(root)
             try secureDirectory(home)
-            try secureDirectory(browser)
+            try secureDirectory(browserProfiles)
             let config = home.appendingPathComponent("config.toml")
             if !manager.fileExists(atPath: config.path) {
                 let note = "# Almacén de autenticación aislado. El historial permanece en ~/.codex.\ncli_auth_credentials_store = \"file\"\n"
                 try note.write(to: config, atomically: true, encoding: .utf8)
                 try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
             }
-            profiles.append(AccountProfile(id: id, name: name, codexHome: home.path, browserData: browser.path,
+            profiles.append(AccountProfile(id: id, name: name, codexHome: home.path, browserData: legacyOpera.path,
                                            email: nil, plan: nil, primary: nil, secondary: nil, limitReason: nil,
                                            lastChecked: nil, lastError: nil, isEnabled: true, isCurrentInstallation: false))
             selectedID = id
@@ -664,6 +670,7 @@ final class SwitchboardStore: ObservableObject {
             if manager.fileExists(atPath: profileRoot.path) {
                 try manager.trashItem(at: profileRoot, resultingItemURL: &trashedURL)
             }
+            WKWebsiteDataStore.remove(forIdentifier: profile.id) { _ in }
             profiles.removeAll { $0.id == profile.id }
             if selectedID == profile.id { selectedID = profiles.first?.id }
             save()
@@ -728,6 +735,17 @@ final class SwitchboardStore: ObservableObject {
 
     func setWindowPrimingEffort(_ effort: String) {
         windowPrimingEffort = effort
+        save()
+    }
+
+    func setBillingBrowser(_ browser: BillingBrowser) {
+        billingBrowser = browser
+        save()
+        statusMessage = L10n.text("Navegador de facturación actualizado a \(browser.displayName).", "Billing browser changed to \(browser.displayName).")
+    }
+
+    func setOperaVPNForBilling(_ enabled: Bool) {
+        operaVPNForBilling = enabled
         save()
     }
 
@@ -923,11 +941,18 @@ final class SwitchboardStore: ObservableObject {
 
     func requestPlanManagement(_ profile: AccountProfile) {
         selectedID = profile.id
-        statusMessage = L10n.text("Abriendo el perfil aislado de Opera para \(profile.email ?? profile.name)…", "Opening the isolated Opera profile for \(profile.email ?? profile.name)…")
+        let browser = billingBrowser
+        let useOperaVPN = browser.supportsIntegratedVPN && operaVPNForBilling
+        statusMessage = L10n.text("Abriendo el perfil aislado de \(browser.displayName) para \(profile.email ?? profile.name)…", "Opening the isolated \(browser.displayName) profile for \(profile.email ?? profile.name)…")
+        if browser.isEmbedded {
+            WebKitBillingWindowController.shared.show(profile: profile)
+            statusMessage = L10n.text("Navegador aislado abierto para \(profile.email ?? profile.name).", "Isolated browser opened for \(profile.email ?? profile.name).")
+            return
+        }
         Task {
             do {
                 let stage = try await Task.detached(priority: .userInitiated) {
-                    try OperaPlanSession.open(profile: profile)
+                    try BrowserPlanSession.open(profile: profile, browser: browser, useOperaVPN: useOperaVPN)
                 }.value
                 switch stage {
                 case .vpnSetup:
@@ -1210,9 +1235,17 @@ final class SwitchboardStore: ObservableObject {
                 pendingLimitExpiresAt = state.pendingLimitExpiresAt
                 events = state.events ?? []
                 seamlessSwitching = state.seamlessSwitching ?? true
-                windowPrimingEnabled = state.windowPrimingEnabled ?? true
+                windowPrimingEnabled = state.windowPrimingEnabled ?? false
                 windowPrimingModel = state.windowPrimingModel ?? "gpt-5.6-luna"
                 windowPrimingEffort = state.windowPrimingEffort ?? "low"
+                if let rawBrowser = state.billingBrowser, let savedBrowser = BillingBrowser(rawValue: rawBrowser) {
+                    billingBrowser = savedBrowser
+                } else if profiles.contains(where: { manager.fileExists(atPath: URL(fileURLWithPath: $0.browserData).appendingPathComponent("Default/Preferences").path) }) {
+                    billingBrowser = .opera
+                } else {
+                    billingBrowser = .recommended
+                }
+                operaVPNForBilling = state.operaVPNForBilling ?? (billingBrowser == .opera)
                 if let activeID, let index = profiles.firstIndex(where: { $0.id == activeID }),
                    profiles[index].activatedAt == nil {
                     // Older state has no safe account-specific cutoff. Start observing
@@ -1250,7 +1283,9 @@ final class SwitchboardStore: ObservableObject {
                                        seamlessSwitching: seamlessSwitching,
                                        windowPrimingEnabled: windowPrimingEnabled,
                                        windowPrimingModel: windowPrimingModel,
-                                       windowPrimingEffort: windowPrimingEffort)
+                                       windowPrimingEffort: windowPrimingEffort,
+                                       billingBrowser: billingBrowser.rawValue,
+                                       operaVPNForBilling: operaVPNForBilling)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(state).write(to: stateFile, options: .atomic)
@@ -1320,14 +1355,15 @@ final class SwitchboardStore: ObservableObject {
         var changed = false
         for index in profiles.indices {
             let profileRoot = profilesRoot.appendingPathComponent(profiles[index].id.uuidString, isDirectory: true)
-            let expected = profileRoot.appendingPathComponent("Opera", isDirectory: true)
-            if profiles[index].browserData != expected.path {
-                profiles[index].browserData = expected.path
+            let legacyOpera = profileRoot.appendingPathComponent("Opera", isDirectory: true)
+            let browserProfiles = profileRoot.appendingPathComponent("Browsers", isDirectory: true)
+            if profiles[index].browserData != legacyOpera.path {
+                profiles[index].browserData = legacyOpera.path
                 changed = true
             }
             do {
                 try secureDirectory(profileRoot)
-                try secureDirectory(expected)
+                try secureDirectory(browserProfiles)
                 try secureDirectory(URL(fileURLWithPath: profiles[index].codexHome, isDirectory: true))
             }
             catch { statusMessage = error.localizedDescription }
@@ -1879,7 +1915,7 @@ struct DetailView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 7) {
                     Button { store.requestPlanManagement(profile) } label: {
-                        Label("Gestionar plan en Opera", systemImage: "shield.lefthalf.filled")
+                        Label("Gestionar plan", systemImage: "shield.lefthalf.filled")
                     }
                     .buttonStyle(.bordered)
                     if let date = profile.lastChecked {
@@ -2122,7 +2158,7 @@ struct DetailView: View {
 
     @ViewBuilder private var accountMenu: some View {
         Button("Renombrar") { renameText = profile.name; showingRename = true }
-        Button("Gestionar plan en Opera…") { store.requestPlanManagement(profile) }
+        Button("Gestionar plan…") { store.requestPlanManagement(profile) }
             .disabled(!profile.isSignedIn)
         Button("Abrir carpeta del perfil") { store.openProfileFolder(profile) }
         Divider()
@@ -2223,43 +2259,48 @@ struct StatusBanner: View {
     }
 }
 
-enum OperaPlanError: LocalizedError {
-    case missing
+enum BrowserPlanError: LocalizedError {
+    case missing(BillingBrowser)
     case launch(String)
 
     var errorDescription: String? {
         switch self {
-        case .missing: return L10n.text("Opera no está instalado en /Applications/Opera.app.", "Opera is not installed at /Applications/Opera.app.")
-        case .launch(let message): return L10n.text("No se pudo abrir el perfil aislado de Opera: \(message)", "Could not open the isolated Opera profile: \(message)")
+        case .missing(let browser):
+            return L10n.text("\(browser.displayName) no está instalado en la carpeta Aplicaciones.", "\(browser.displayName) is not installed in the Applications folder.")
+        case .launch(let message):
+            return L10n.text("No se pudo abrir el perfil aislado del navegador: \(message)", "Could not open the isolated browser profile: \(message)")
         }
     }
 }
 
-enum OperaPlanStage {
+enum BrowserPlanStage {
     case vpnSetup
     case billing
 }
 
-enum OperaPlanSession {
-    private static let executable = "/Applications/Opera.app/Contents/MacOS/Opera"
-
-    static func open(profile: AccountProfile) throws -> OperaPlanStage {
-        guard FileManager.default.isExecutableFile(atPath: executable) else { throw OperaPlanError.missing }
-        let root = URL(fileURLWithPath: profile.browserData, isDirectory: true)
+enum BrowserPlanSession {
+    static func open(profile: AccountProfile, browser: BillingBrowser, useOperaVPN: Bool) throws -> BrowserPlanStage {
+        guard browser.isInstalled, let executable = browser.executablePath else { throw BrowserPlanError.missing(browser) }
+        let profileRoot = URL(fileURLWithPath: profile.codexHome, isDirectory: true).deletingLastPathComponent()
+        let root = BrowserProfileLocator.root(
+            profileRoot: profileRoot,
+            browser: browser,
+            legacyOperaPath: profile.browserData
+        )
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
-        if !vpnOptionReady(in: root) { try prepareVPNOption(in: root) }
-
-        let enabled = vpnEnabled(in: root)
-        if !enabled {
-            try launch(root: root, destination: "opera://settings/?search=VPN")
-            return .vpnSetup
+        if browser == .opera, useOperaVPN {
+            if !vpnOptionReady(in: root) { try prepareVPNOption(in: root, browser: browser) }
+            if !vpnEnabled(in: root) {
+                try launch(browser: browser, executable: executable, root: root, destination: "opera://settings/?search=VPN")
+                return .vpnSetup
+            }
         }
-        try launch(root: root, destination: billingBridgeURL)
+        try launch(browser: browser, executable: executable, root: root, destination: billingURL)
         return .billing
     }
 
-    private static func launch(root: URL, destination: String) throws {
+    private static func launch(browser: BillingBrowser, executable: String, root: URL, destination: String) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         let arguments = [
@@ -2272,9 +2313,9 @@ enum OperaPlanSession {
         do {
             try process.run()
             Thread.sleep(forTimeInterval: 0.35)
-            activateOpera(using: root)
+            activate(browser: browser, using: root)
         }
-        catch { throw OperaPlanError.launch(error.localizedDescription) }
+        catch { throw BrowserPlanError.launch(error.localizedDescription) }
     }
 
     private static func vpnEnabled(in root: URL) -> Bool {
@@ -2287,7 +2328,7 @@ enum OperaPlanSession {
         return switcher["enabled"] as? Bool == true
     }
 
-    private static var billingBridgeURL: String {
+    private static var billingURL: String {
         "https://chatgpt.com/#settings/Billing"
     }
 
@@ -2301,8 +2342,8 @@ enum OperaPlanSession {
         return switcher?["enabled"] as? Bool == true || (migrated && switcher?["ui_visible"] as? Bool == true)
     }
 
-    private static func prepareVPNOption(in root: URL) throws {
-        terminateOpera(using: root)
+    private static func prepareVPNOption(in root: URL, browser: BillingBrowser) throws {
+        terminate(browser: browser, using: root)
         let defaultFolder = root.appendingPathComponent("Default", isDirectory: true)
         try FileManager.default.createDirectory(at: defaultFolder, withIntermediateDirectories: true)
         let preferences = defaultFolder.appendingPathComponent("Preferences")
@@ -2327,7 +2368,7 @@ enum OperaPlanSession {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: preferences.path)
     }
 
-    private static func terminateOpera(using root: URL) {
+    private static func terminate(browser: BillingBrowser, using root: URL) {
         let process = Process()
         let output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -2340,7 +2381,8 @@ enum OperaPlanSession {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         let text = String(data: data, encoding: .utf8) ?? ""
-        let marker = "/Applications/Opera.app/Contents/MacOS/Opera --user-data-dir=\(root.path)"
+        guard let executable = browser.executablePath else { return }
+        let marker = "\(executable) --user-data-dir=\(root.path)"
         for line in text.split(separator: "\n") where line.contains(marker) {
             guard let token = line.split(whereSeparator: { $0 == " " || $0 == "\t" }).first,
                   let pid = pid_t(token) else { continue }
@@ -2348,8 +2390,9 @@ enum OperaPlanSession {
         }
     }
 
-    private static func activateOpera(using root: URL) {
-        let marker = "/Applications/Opera.app/Contents/MacOS/Opera --user-data-dir=\(root.path)"
+    private static func activate(browser: BillingBrowser, using root: URL) {
+        guard let executable = browser.executablePath else { return }
+        let marker = "\(executable) --user-data-dir=\(root.path)"
         for _ in 0..<10 {
             let process = Process()
             let output = Pipe()
@@ -2372,22 +2415,61 @@ enum OperaPlanSession {
         }
     }
 
-    private static func waitForOperaToExit(using root: URL) {
-        let marker = "/Applications/Opera.app/Contents/MacOS/Opera --user-data-dir=\(root.path)"
-        for _ in 0..<30 {
-            let process = Process()
-            let output = Pipe()
-            process.executableURL = URL(fileURLWithPath: "/bin/ps")
-            process.arguments = ["-axo", "command="]
-            process.standardOutput = output
-            process.standardError = FileHandle.nullDevice
-            guard (try? process.run()) != nil else { return }
-            let data = output.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let text = String(data: data, encoding: .utf8) ?? ""
-            if !text.contains(marker) { return }
-            Thread.sleep(forTimeInterval: 0.1)
+}
+
+@MainActor
+final class WebKitBillingWindowController: NSObject, WKUIDelegate, WKNavigationDelegate, NSWindowDelegate {
+    static let shared = WebKitBillingWindowController()
+
+    private var windows: [UUID: NSWindow] = [:]
+    private var webViews: [UUID: WKWebView] = [:]
+
+    func show(profile: AccountProfile) {
+        if let window = windows[profile.id] {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            return
         }
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profile.id)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.uiDelegate = self
+        webView.navigationDelegate = self
+
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
+        window.title = L10n.text("Plan de \(profile.name) · Navegador aislado", "\(profile.name) plan · Isolated browser")
+        window.contentView = webView
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.identifier = NSUserInterfaceItemIdentifier(profile.id.uuidString)
+        windows[profile.id] = window
+        webViews[profile.id] = webView
+
+        if let url = URL(string: "https://chatgpt.com/#settings/Billing") {
+            webView.load(URLRequest(url: url))
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if navigationAction.targetFrame == nil {
+            webView.load(navigationAction.request)
+        }
+        return nil
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              let rawID = window.identifier?.rawValue,
+              let id = UUID(uuidString: rawID) else { return }
+        windows.removeValue(forKey: id)
+        webViews.removeValue(forKey: id)
     }
 }
 
@@ -2509,7 +2591,7 @@ struct CodexSwitchboardApp: App {
                 if let next = store.recommendedNext {
                     Text(L10n.text("Siguiente automática: \(next.name)", "Next automatic: \(next.name)"))
                 }
-                Button(L10n.text("Gestionar plan de \(active.name) en Opera…", "Manage \(active.name)'s plan in Opera…")) {
+                Button(L10n.text("Gestionar plan de \(active.name)…", "Manage \(active.name)'s plan…")) {
                     store.requestPlanManagement(active)
                 }
                 .disabled(!active.isSignedIn)
@@ -2595,6 +2677,28 @@ struct SettingsView: View {
                     set: store.setWindowPrimingEnabled
                 ))
             }
+            Section("Facturación") {
+                Picker("Navegador de facturación", selection: Binding(
+                    get: { store.billingBrowser },
+                    set: store.setBillingBrowser
+                )) {
+                    ForEach(BillingBrowser.allCases) { browser in
+                        Text(browser.isInstalled
+                             ? browser.displayName
+                             : L10n.text("\(browser.displayName) — no instalado", "\(browser.displayName) — not installed"))
+                            .tag(browser)
+                    }
+                }
+                if store.billingBrowser.supportsIntegratedVPN {
+                    Toggle("Usar la VPN integrada de Opera", isOn: Binding(
+                        get: { store.operaVPNForBilling },
+                        set: store.setOperaVPNForBilling
+                    ))
+                }
+                Text("Cada cuenta utiliza un perfil separado del navegador elegido. Sus cookies e inicios de sesión no se comparten con otras cuentas ni con tu perfil habitual.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Section("Privacidad") {
                 Label("Los perfiles viven en Application Support con permisos 0700.", systemImage: "lock.fill")
                     .fixedSize(horizontal: false, vertical: true)
@@ -2610,7 +2714,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .padding(20)
-        .frame(width: 620, height: 520)
+        .frame(width: 620, height: 620)
         .alert("Activar cambio automático", isPresented: $store.showingAutoRotationWarning) {
             Button("Cancelar", role: .cancel) {}
             Button("Activar") { store.confirmAutomaticRotation() }

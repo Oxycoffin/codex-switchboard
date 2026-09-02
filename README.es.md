@@ -4,6 +4,9 @@
 
 [Read in English](README.md)
 
+> [!IMPORTANT]
+> Codex Switchboard es un proyecto independiente y no oficial. No está afiliado ni respaldado por OpenAI. Cada usuario es responsable de cumplir las condiciones aplicables a todas sus cuentas y no debe usar Switchboard para compartir credenciales ni eludir restricciones del servicio.
+
 Codex Switchboard mantiene preparadas tus cuentas de pago, muestra cuánto uso le queda a cada una y mueve Codex a una cuenta disponible cuando la actual alcanza su límite. Tus tareas, proyectos y conversaciones permanecen juntos en la app oficial de Codex.
 
 ## Qué aporta
@@ -43,9 +46,11 @@ Todos los perfiles permanecen en este Mac bajo `~/Library/Application Support/Co
 
 Los perfiles del navegador para facturación están aislados por cuenta. No comparten cookies ni historial entre ellos ni con tu perfil habitual.
 
+Puedes elegir el navegador WebKit integrado —el motor de Safari—, Google Chrome, Microsoft Edge, Brave, Vivaldi u Opera desde Ajustes. Cada combinación de navegador y cuenta utiliza su propio almacenamiento. La app Safari no se automatiza porque macOS no ofrece una vía pública fiable para abrir un perfil concreto. La preparación de la VPN integrada es opcional y solo aparece al seleccionar Opera.
+
 ## Instalación
 
-Codex Switchboard requiere actualmente macOS 14 o posterior y se distribuye desde el código fuente mientras el repositorio sea privado.
+Codex Switchboard requiere actualmente macOS 14 o posterior y se distribuye desde el código fuente. Las compilaciones publicadas no están notarizadas por Apple.
 
 ```zsh
 chmod +x build.sh install.sh
@@ -64,3 +69,5 @@ La interfaz está disponible en español e inglés. Puede seguir automáticament
 Empieza por [Arquitectura](docs/ARCHITECTURE.md) para entender los procesos y los datos, y consulta [Contribuir](CONTRIBUTING.md) antes de modificar la app. Las normas de producto y localización del repositorio están en [AGENTS.md](AGENTS.md).
 
 La app oficial de Codex debe permanecer intacta, los secretos de las cuentas nunca pueden quedar expuestos y todo cambio visible debe funcionar en español e inglés.
+
+El código de Codex Switchboard está disponible bajo la [licencia PolyForm Noncommercial 1.0.0](LICENSE). Se permite usarlo, estudiarlo, modificarlo y redistribuirlo con fines no comerciales. No se permiten el uso comercial, la venta ni la sublicencia. Consulta el [historial de cambios](CHANGELOG.md), [Seguridad](SECURITY.md), [Soporte](SUPPORT.md) y el [Código de conducta](CODE_OF_CONDUCT.md) antes de participar.

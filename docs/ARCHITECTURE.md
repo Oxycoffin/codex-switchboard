@@ -18,6 +18,8 @@ Account authentication profiles are isolated under the Switchboard application-s
 
 The manager persists profile metadata, settings, validated quota snapshots, and a small event history. It does not persist conversation content in its own state. Authentication material is read only from private profile files when required and is not copied into status files or process arguments.
 
+Billing sessions use either an embedded WebKit view with a persistent data-store identifier derived from the Switchboard account, or a selectable Chromium-family browser with an isolated user-data directory. Storage is partitioned by Switchboard account and browser, so changing the selection cannot merge cookies with another account or with the user's normal profile. The Safari app is intentionally not driven through private interfaces or UI scripting. Opera-specific VPN preparation is an optional adapter rather than a product dependency.
+
 ## Switching flow
 
 For a live switch, the manager validates the destination session before asking the bridge to use it. The bridge changes the authentication used by subsequent requests and then the manager commits the same destination to persistent state. An in-flight network request remains owned by the account that started it.

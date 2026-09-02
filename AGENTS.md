@@ -9,6 +9,8 @@ These rules apply to the whole repository.
 - Only the primary Codex app server may own the shared bridge runtime. Auxiliary and computer-use hosts must pass through without writing shared status or accepting switch commands.
 - Never log, publish, embed, or display access tokens, refresh tokens, `auth.json`, cookies, or conversation contents.
 - Attribute terminal events to the profile that owned the originating turn. A delayed event must never rotate the currently active profile by mistake.
+- Keep background network activity opt-in for new installations. Do not add behavior intended to bypass service restrictions or provider terms.
+- Keep billing profiles isolated by account and browser. Never make a browser-specific feature a product requirement.
 
 ## User interface and data
 
