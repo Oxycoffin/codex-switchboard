@@ -2,6 +2,10 @@
 
 All notable user-facing changes are documented here.
 
+## Unreleased
+
+- Changed the project license to PolyForm Noncommercial 1.0.0. Noncommercial use, modification, and redistribution remain permitted; commercial use, sale, and sublicensing are not.
+
 ## 0.4.2 — 2026-09-02
 
 - Made automatic account switching and five-hour window preparation clearly separate, opt-in settings.
