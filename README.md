@@ -13,7 +13,7 @@ Codex Switchboard keeps your paid accounts ready, shows how much usage each one 
 
 - One Codex window and one shared task history.
 - Clear remaining usage and reset times for every connected account.
-- Automatic switching when the active account is genuinely out of usage.
+- Optional automatic switching when the active account is genuinely out of usage.
 - Live switching when the bridge is available, with a safe app-restart fallback.
 - Automatic recovery when every account was exhausted and one becomes available again.
 - Sign-in, sign-out, account removal, plan visibility, and direct access to plan management.
@@ -35,10 +35,12 @@ The bridge is external: Switchboard does not patch the Codex application, edit `
 1. Open Switchboard from the menu bar.
 2. Add each Codex account through the official sign-in flow.
 3. Choose which accounts may participate in automatic switching.
-4. Leave automatic switching enabled, or select an account manually at any time.
+4. Enable automatic switching if you want it, or select an account manually at any time.
 5. Open an account to see its plan, limits, reset times, and account actions.
 
 The account currently used by Codex is always identified. Availability is shown as capacity remaining, from 100% down to 0%.
+
+Automatic switching and five-hour window preparation are separate settings. Both are off on a new installation and run only after you enable them.
 
 ## Privacy and safety
 

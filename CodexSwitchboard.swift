@@ -146,7 +146,7 @@ struct PersistedState: Codable {
     var profiles: [AccountProfile]
     var selectedID: UUID?
     var activeID: UUID?
-    var automaticRotation: Bool
+    var automaticRotation: Bool?
     var refreshMinutes: Int
     var pendingLimitAccountID: UUID?
     var pendingLimitDetectedAt: Date?
@@ -579,6 +579,7 @@ final class SwitchboardStore: ObservableObject {
     private var lastBridgeLimitAt: Date?
     private var bridgeCommitProfileID: UUID?
     private var lastAppliedBridgeRateLimitsAt: Date?
+    private var browserDataStoresBeingCleared: [UUID: WKWebsiteDataStore] = [:]
 
     private var support: URL {
         manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -670,7 +671,7 @@ final class SwitchboardStore: ObservableObject {
             if manager.fileExists(atPath: profileRoot.path) {
                 try manager.trashItem(at: profileRoot, resultingItemURL: &trashedURL)
             }
-            WKWebsiteDataStore.remove(forIdentifier: profile.id) { _ in }
+            clearBrowserData(for: profile.id)
             profiles.removeAll { $0.id == profile.id }
             if selectedID == profile.id { selectedID = profiles.first?.id }
             save()
@@ -1226,7 +1227,7 @@ final class SwitchboardStore: ObservableObject {
                 profiles = state.profiles
                 selectedID = state.selectedID
                 activeID = state.activeID
-                automaticRotation = state.automaticRotation
+                automaticRotation = state.automaticRotation ?? false
                 // One minute is the fallback; completed turns are refreshed
                 // reactively by the thread monitor below.
                 refreshMinutes = 1
@@ -1296,6 +1297,17 @@ final class SwitchboardStore: ObservableObject {
     private func secureDirectory(_ url: URL) throws {
         try manager.createDirectory(at: url, withIntermediateDirectories: true)
         try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+    }
+
+    private func clearBrowserData(for profileID: UUID) {
+        let store = WKWebsiteDataStore(forIdentifier: profileID)
+        browserDataStoresBeingCleared[profileID] = store
+        store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                         modifiedSince: .distantPast) { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.browserDataStoresBeingCleared.removeValue(forKey: profileID)
+            }
+        }
     }
 
     private func writeJournal(_ journal: CredentialSwitchJournal) throws {
@@ -2664,10 +2676,15 @@ struct SettingsView: View {
                         Text(language.displayName).tag(language)
                     }
                 }
+            }
+            Section("Automatización") {
                 Toggle("Cambio automático", isOn: Binding(
                     get: { store.automaticRotation },
                     set: store.setAutomaticRotation
                 ))
+                Text("Usa otra cuenta disponible cuando la cuenta activa se agota.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Toggle("Cambio sin cerrar Codex", isOn: Binding(
                     get: { store.seamlessSwitching },
                     set: store.setSeamlessSwitching
@@ -2676,6 +2693,9 @@ struct SettingsView: View {
                     get: { store.windowPrimingEnabled },
                     set: store.setWindowPrimingEnabled
                 ))
+                Text("Inicia de forma independiente las ventanas de las cuentas conectadas mientras el Mac está despierto.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("Facturación") {
                 Picker("Navegador de facturación", selection: Binding(

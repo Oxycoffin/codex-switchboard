@@ -33,6 +33,7 @@ mkdir -p "$build_dir" "$source_root" "$app_dir/Contents/MacOS" "$app_dir/Content
 node "$project_dir/scripts/check-localizations.js"
 node "$project_dir/scripts/check-visible-localizations.js"
 node "$project_dir/scripts/check-menu-safety.js"
+node "$project_dir/scripts/check-automation-opt-in.js"
 for source in CodexSwitchboard.swift UsageWindows.swift BrowserProfiles.swift Pulse.swift CodexHotBridge.swift make_icon.swift Info.plist; do
   cp "$project_dir/$source" "$source_root/$source"
 done

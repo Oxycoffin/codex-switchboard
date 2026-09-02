@@ -13,6 +13,7 @@ Requirements:
 Build and run the local checks:
 
 ```zsh
+node scripts/check-automation-opt-in.js
 ./build.sh
 swiftc UsageWindows.swift tests/test-usage-windows.swift -o /tmp/codex-switchboard-window-tests
 /tmp/codex-switchboard-window-tests

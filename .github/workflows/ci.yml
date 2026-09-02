@@ -24,6 +24,7 @@ jobs:
           zsh -n build.sh install.sh
           for file in scripts/*.js tests/*.js experiments/*.js; do node --check "$file"; done
           plutil -lint Info.plist local.codex.switchboard.pulse.plist
+          node scripts/check-automation-opt-in.js
       - name: Test usage-window classification
         run: |
           swiftc UsageWindows.swift tests/test-usage-windows.swift -o /tmp/codex-switchboard-window-tests

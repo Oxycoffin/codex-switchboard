@@ -49,6 +49,7 @@
 "CUENTAS" = "ACCOUNTS";
 "Usar en Codex" = "Use in Codex";
 "General" = "General";
+"Automatización" = "Automation";
 "Idioma" = "Language";
 "Sistema" = "System";
 "Compatibilidad" = "Compatibility";
@@ -57,6 +58,8 @@
 "Si OpenAI cambia el protocolo de cuenta o límites, el monitor mostrará un error y no intentará modificar credenciales." = "If OpenAI changes the account or usage protocol, the monitor will show an error and will not attempt to modify credentials.";
 "Activar cambio automático" = "Enable automatic switching";
 "Activar" = "Enable";
+"Usa otra cuenta disponible cuando la cuenta activa se agota." = "Uses another available account when the active account runs out of usage.";
+"Inicia de forma independiente las ventanas de las cuentas conectadas mientras el Mac está despierto." = "Starts connected accounts' windows independently while the Mac is awake.";
 "Switchboard cambiará de cuenta cuando Codex confirme que no queda uso." = "Switchboard will switch accounts when Codex confirms that no usage remains.";
 "Renombrar cuenta" = "Rename account";
 "Guardar" = "Save";

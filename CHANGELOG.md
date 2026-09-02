@@ -2,6 +2,12 @@
 
 All notable user-facing changes are documented here.
 
+## 0.4.2 — 2026-09-02
+
+- Made automatic account switching and five-hour window preparation clearly separate, opt-in settings.
+- Preserved existing choices while keeping both features off by default for new or older incomplete configurations.
+- Prevented an account-removal cleanup from taking down the menu-bar app on macOS 26.
+
 ## 0.4.1 — 2026-09-02
 
 - Added the community, security, support, licensing, issue, pull-request, and continuous-integration files required for a public source repository.

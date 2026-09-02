@@ -13,7 +13,7 @@ Codex Switchboard mantiene preparadas tus cuentas de pago, muestra cuánto uso l
 
 - Una sola ventana de Codex y un historial de tareas compartido.
 - Uso restante y tiempos de reinicio claros para todas las cuentas conectadas.
-- Cambio automático cuando la cuenta activa se queda realmente sin uso.
+- Cambio automático opcional cuando la cuenta activa se queda realmente sin uso.
 - Cambio en vivo cuando el puente está disponible, con reinicio seguro como alternativa.
 - Recuperación automática cuando todas estaban agotadas y una vuelve a estar disponible.
 - Inicio y cierre de sesión, eliminación de cuentas, plan visible y acceso directo a su gestión.
@@ -35,10 +35,12 @@ El puente es externo: Switchboard no parchea la aplicación de Codex, no edita `
 1. Abre Switchboard desde la barra de menús.
 2. Añade cada cuenta mediante el acceso oficial de Codex.
 3. Elige qué cuentas pueden participar en el cambio automático.
-4. Deja activado el cambio automático o selecciona una cuenta manualmente cuando quieras.
+4. Activa el cambio automático si lo quieres o selecciona una cuenta manualmente cuando quieras.
 5. Abre una cuenta para consultar su plan, límites, reinicios y acciones.
 
 La cuenta que usa Codex se identifica en todo momento. La disponibilidad se muestra como capacidad restante, desde el 100% hasta el 0%.
+
+El cambio automático y la preparación de ventanas de cinco horas son ajustes independientes. Ambos están desactivados en una instalación nueva y solo funcionan después de activarlos.
 
 ## Privacidad y seguridad
 
