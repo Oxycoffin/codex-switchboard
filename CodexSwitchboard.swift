@@ -9,19 +9,6 @@ final class LifecycleCoordinator {
     var managedCodexRestart = false
 }
 
-struct UsageWindow: Codable, Hashable {
-    var usedPercent: Int
-    var resetsAt: Date?
-    var durationMinutes: Int?
-
-    func current(at date: Date) -> UsageWindow {
-        guard let resetsAt, resetsAt <= date else { return self }
-        return UsageWindow(usedPercent: 0, resetsAt: nil, durationMinutes: durationMinutes)
-    }
-
-    var currentValue: UsageWindow { current(at: Date()) }
-}
-
 enum PreciseTime {
     static func remaining(until date: Date, now: Date = Date()) -> String {
         let total = max(0, Int(ceil(date.timeIntervalSince(now))))
@@ -115,8 +102,11 @@ struct AccountProfile: Codable, Identifiable, Hashable {
             return rawPlan.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
-    var currentPrimary: UsageWindow? { primary?.currentValue }
-    var currentSecondary: UsageWindow? { secondary?.currentValue }
+    private var classifiedWindows: ClassifiedUsageWindows {
+        UsageWindowClassifier.classify(primary: primary, secondary: secondary)
+    }
+    var currentPrimary: UsageWindow? { classifiedWindows.short?.currentValue }
+    var currentSecondary: UsageWindow? { classifiedWindows.weekly?.currentValue }
     private var hasCurrentBackendBlock: Bool {
         guard limitReason != nil else { return false }
         let windows = [primary, secondary].compactMap { $0 }
@@ -255,7 +245,7 @@ final class AppServerSession {
 
     func initialize() throws -> String? {
         let id = try send(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.3.9"],
+            "clientInfo": ["name": "codex-switchboard", "title": "Codex Switchboard", "version": "0.4.0"],
             "capabilities": ["experimentalApi": true]
         ])
         let result = try waitForResponse(id: id, timeout: 12)
@@ -370,12 +360,19 @@ enum CodexBridge {
         let snapshots = limits["rateLimitsByLimitId"] as? [String: Any]
         let codexSnapshot = snapshots?["codex"] as? [String: Any]
         let snapshot = codexSnapshot ?? legacySnapshot
+        let positioned = UsageWindowClassifier.classify(
+            primary: usageWindow(snapshot?["primary"]),
+            secondary: usageWindow(snapshot?["secondary"])
+        )
+        let discovered = UsageWindowClassifier.classify(
+            discovered: snapshot?.values.compactMap(usageWindow) ?? []
+        )
         let resetCredits = limits["rateLimitResetCredits"] as? [String: Any]
         return ProbeResult(
             email: accountObject?["email"] as? String,
             plan: (accountObject?["planType"] as? String) ?? (snapshot?["planType"] as? String),
-            primary: usageWindow(snapshot?["primary"]),
-            secondary: usageWindow(snapshot?["secondary"]),
+            primary: discovered.short ?? positioned.short,
+            secondary: discovered.weekly ?? positioned.weekly,
             limitReason: (snapshot?["rateLimitReachedType"] as? String)
                 ?? ((snapshot?["spendControlReached"] as? Bool) == true ? "spend_control_reached" : nil),
             resetCreditsAvailable: resetCredits?["availableCount"] as? Int,
@@ -485,7 +482,7 @@ struct HotBridgeRateLimits: Codable {
 }
 
 enum HotBridgeClient {
-    static let expectedVersion = "0.3.9"
+    static let expectedVersion = "0.4.0"
     private static var runtimeDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Codex Switchboard/Bridge", isDirectory: true)
@@ -1405,8 +1402,8 @@ final class SwitchboardStore: ObservableObject {
               let activeID,
               bridge.activeProfileID == nil || bridge.activeProfileID == activeID.uuidString,
               let index = profiles.firstIndex(where: { $0.id == activeID }) else { return }
-        if let primary = limits.primary { profiles[index].primary = primary.usageWindow }
-        if let secondary = limits.secondary { profiles[index].secondary = secondary.usageWindow }
+        profiles[index].primary = limits.primary?.usageWindow
+        profiles[index].secondary = limits.secondary?.usageWindow
         profiles[index].limitReason = limits.rateLimitReachedType
             ?? (limits.spendControlReached == true ? "spend_control_reached" : nil)
         profiles[index].spendControlReached = limits.spendControlReached
@@ -1762,8 +1759,12 @@ struct AccountRow: View {
                 if profile.hasReliableQuota {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         HStack(alignment: .top, spacing: 14) {
-                            SidebarQuotaMetric(title: "5 H", window: profile.currentPrimary, now: context.date)
-                            SidebarQuotaMetric(title: L10n.text("SEMANA", "WEEK"), window: profile.currentSecondary, now: context.date)
+                            if let short = profile.currentPrimary {
+                                SidebarQuotaMetric(title: "5 H", window: short, now: context.date)
+                            }
+                            if let weekly = profile.currentSecondary {
+                                SidebarQuotaMetric(title: L10n.text("SEMANA", "WEEK"), window: weekly, now: context.date)
+                            }
                         }
                     }
                 }
@@ -1786,19 +1787,19 @@ struct AccountRow: View {
 
 private struct SidebarQuotaMetric: View {
     let title: String
-    let window: UsageWindow?
+    let window: UsageWindow
     let now: Date
 
     var body: some View {
-        let current = window?.current(at: now)
+        let current = window.current(at: now)
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.tertiary)
-            Text(current.map { "\(max(0, 100 - $0.usedPercent))%" } ?? "—")
+            Text("\(max(0, 100 - current.usedPercent))%")
                 .font(.caption.weight(.semibold).monospacedDigit())
                 .foregroundStyle(.primary)
-            if let reset = current?.resetsAt {
+            if let reset = current.resetsAt {
                 Label(PreciseTime.compactRemaining(until: reset, now: now), systemImage: "clock")
                     .font(.system(size: 9, weight: .regular, design: .monospaced))
                     .foregroundStyle(.tertiary)
@@ -1886,8 +1887,12 @@ struct DetailView: View {
                     }
                 }
             }
-            UsageMeter(title: L10n.text("VENTANA CORTA", "SHORT WINDOW"), window: profile.currentPrimary)
-            UsageMeter(title: L10n.text("VENTANA SEMANAL", "WEEKLY WINDOW"), window: profile.currentSecondary)
+            if let short = profile.currentPrimary {
+                UsageMeter(title: L10n.text("VENTANA CORTA", "SHORT WINDOW"), window: short)
+            }
+            if let weekly = profile.currentSecondary {
+                UsageMeter(title: L10n.text("VENTANA SEMANAL", "WEEKLY WINDOW"), window: weekly)
+            }
             if let credits = profile.resetCreditsAvailable, credits > 0 {
                 Label(L10n.text("\(credits) reinicio\(credits == 1 ? "" : "s") de límite disponible\(credits == 1 ? "" : "s") en Codex", "\(credits) usage reset\(credits == 1 ? "" : "s") available in Codex"), systemImage: "arrow.counterclockwise.circle.fill")
                     .font(.caption).foregroundStyle(.blue)
@@ -2031,6 +2036,7 @@ struct DetailView: View {
         case "window-in-use": return L10n.text("Ventana actualmente en uso\(reset)", "Window currently in use\(reset)")
         case "window-opened-elsewhere": return L10n.text("Otra tarea inició la ventana\(reset)", "Another task started the window\(reset)")
         case "fully-blocked": return L10n.text("La cuenta está completamente bloqueada\(reset)", "The account is fully blocked\(reset)")
+        case "not-supported": return L10n.text("Este plan no tiene una ventana de cinco horas", "This plan has no five-hour window")
         default: return L10n.text("Comprobada \(relativeSpanish(record.checkedAt))\(reset)", "Checked \(relativeSpanish(record.checkedAt))\(reset)")
         }
     }

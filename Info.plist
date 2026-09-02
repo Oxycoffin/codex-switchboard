@@ -9,8 +9,8 @@
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Codex Switchboard</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.3.9</string>
-  <key>CFBundleVersion</key><string>11</string>
+  <key>CFBundleShortVersionString</key><string>0.4.0</string>
+  <key>CFBundleVersion</key><string>12</string>
   <key>CFBundleDevelopmentRegion</key><string>es</string>
   <key>CFBundleLocalizations</key><array><string>es</string><string>en</string></array>
   <key>LSMinimumSystemVersion</key><string>14.0</string>

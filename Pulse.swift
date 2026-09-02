@@ -33,9 +33,9 @@ private struct PrimingLedger: Codable {
 }
 
 private struct RateSnapshot {
-    let primaryUsed: Int
-    let primaryReset: Date?
-    let secondaryUsed: Int?
+    let shortUsed: Int?
+    let shortReset: Date?
+    let weeklyUsed: Int?
     let blocked: Bool
 }
 
@@ -236,29 +236,34 @@ private final class WindowPrimingCoordinator {
 
         let firstReadAt = Date()
         let first = try rateSnapshot(server)
-        guard first.primaryUsed == 0 else {
-            record(profile, email: email, model: model, effort: effort, status: "window-in-use",
-                   resetAt: first.primaryReset, ledger: &ledger)
+        guard let firstShortUsed = first.shortUsed else {
+            record(profile, email: email, model: model, effort: effort, status: "not-supported",
+                   resetAt: nil, ledger: &ledger)
             return
         }
-        guard first.secondaryUsed != 100, !first.blocked else {
+        guard firstShortUsed == 0 else {
+            record(profile, email: email, model: model, effort: effort, status: "window-in-use",
+                   resetAt: first.shortReset, ledger: &ledger)
+            return
+        }
+        guard first.weeklyUsed != 100, !first.blocked else {
             record(profile, email: email, model: model, effort: effort, status: "fully-blocked",
-                   resetAt: first.primaryReset, ledger: &ledger)
+                   resetAt: first.shortReset, ledger: &ledger)
             return
         }
 
         Thread.sleep(forTimeInterval: 3.2)
         let secondReadAt = Date()
         let second = try rateSnapshot(server)
-        guard second.primaryUsed == 0 else {
+        guard second.shortUsed == 0 else {
             record(profile, email: email, model: model, effort: effort, status: "window-opened-elsewhere",
-                   resetAt: second.primaryReset, ledger: &ledger)
+                   resetAt: second.shortReset, ledger: &ledger)
             return
         }
         guard isMovingCleanWindow(first: first, firstReadAt: firstReadAt,
                                   second: second, secondReadAt: secondReadAt) else {
             record(profile, email: email, model: model, effort: effort, status: "already-anchored",
-                   resetAt: second.primaryReset, ledger: &ledger)
+                   resetAt: second.shortReset, ledger: &ledger)
             return
         }
 
@@ -293,7 +298,7 @@ private final class WindowPrimingCoordinator {
         }
         Thread.sleep(forTimeInterval: 4)
         let after = try rateSnapshot(server)
-        guard let reset = after.primaryReset,
+        guard let reset = after.shortReset,
               reset.timeIntervalSince(started) > 17_400,
               reset.timeIntervalSince(started) < 18_600 else {
             throw PrimingError.invalidResponse("Codex no confirmó una ventana nueva de cinco horas")
@@ -322,23 +327,30 @@ private final class WindowPrimingCoordinator {
         let result = try server.request(method: "account/rateLimits/read")
         let byID = result["rateLimitsByLimitId"] as? [String: Any]
         let snapshot = (byID?["codex"] as? [String: Any]) ?? (result["rateLimits"] as? [String: Any])
-        guard let snapshot,
-              let primary = snapshot["primary"] as? [String: Any],
-              let used = number(primary["usedPercent"])?.intValue else {
-            throw PrimingError.invalidResponse("no se recibió la ventana Codex de cinco horas")
+        guard let snapshot else {
+            throw PrimingError.invalidResponse("no se recibieron ventanas de uso de Codex")
         }
-        let reset = number(primary["resetsAt"]).map { Date(timeIntervalSince1970: $0.doubleValue) }
-        let secondary = snapshot["secondary"] as? [String: Any]
-        let secondaryUsed = number(secondary?["usedPercent"])?.intValue
+        let windows = snapshot.values.compactMap { $0 as? [String: Any] }
+        let hasDurations = windows.contains { number($0["windowDurationMins"]) != nil }
+        let short = hasDurations
+            ? windows.first { (number($0["windowDurationMins"])?.intValue ?? 1_440) < 1_440 }
+            : snapshot["primary"] as? [String: Any]
+        let weekly = hasDurations
+            ? windows.first { (number($0["windowDurationMins"])?.intValue ?? 0) >= 1_440 }
+            : snapshot["secondary"] as? [String: Any]
         let reason = snapshot["rateLimitReachedType"] as? String
         let spendBlocked = snapshot["spendControlReached"] as? Bool == true
-        return RateSnapshot(primaryUsed: used, primaryReset: reset, secondaryUsed: secondaryUsed,
-                            blocked: reason != nil || spendBlocked)
+        return RateSnapshot(
+            shortUsed: number(short?["usedPercent"])?.intValue,
+            shortReset: number(short?["resetsAt"]).map { Date(timeIntervalSince1970: $0.doubleValue) },
+            weeklyUsed: number(weekly?["usedPercent"])?.intValue,
+            blocked: reason != nil || spendBlocked
+        )
     }
 
     private func isMovingCleanWindow(first: RateSnapshot, firstReadAt: Date,
                                      second: RateSnapshot, secondReadAt: Date) -> Bool {
-        guard let firstReset = first.primaryReset, let secondReset = second.primaryReset else { return false }
+        guard let firstReset = first.shortReset, let secondReset = second.shortReset else { return false }
         let elapsed = secondReadAt.timeIntervalSince(firstReadAt)
         let moved = secondReset.timeIntervalSince(firstReset)
         let firstIsFiveHours = abs(firstReset.timeIntervalSince(firstReadAt) - 18_000) < 20

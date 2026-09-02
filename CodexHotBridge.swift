@@ -111,7 +111,7 @@ private final class HotBridge {
         status = BridgeStatus(
             pid: ProcessInfo.processInfo.processIdentifier,
             ready: false,
-            version: "0.3.9",
+            version: "0.4.0",
             startedAt: Date(),
             updatedAt: Date(),
             activeThreadID: nil,
@@ -334,8 +334,18 @@ private final class HotBridge {
             }
         case "account/rateLimits/updated":
             guard let snapshot = params["rateLimits"] as? [String: Any] else { return }
-            let primary = bridgeWindow(snapshot["primary"])
-            let secondary = bridgeWindow(snapshot["secondary"])
+            let positionedPrimary = bridgeWindow(snapshot["primary"])
+            let positionedSecondary = bridgeWindow(snapshot["secondary"])
+            let discovered = snapshot.values.compactMap(bridgeWindow)
+            let hasDurations = discovered.contains { $0.windowDurationMins != nil }
+            let primary = hasDurations
+                ? discovered.filter { ($0.windowDurationMins ?? 1_440) < 1_440 }
+                    .min { abs(($0.windowDurationMins ?? 300) - 300) < abs(($1.windowDurationMins ?? 300) - 300) }
+                : positionedPrimary
+            let secondary = hasDurations
+                ? discovered.filter { ($0.windowDurationMins ?? 0) >= 1_440 }
+                    .min { abs(($0.windowDurationMins ?? 10_080) - 10_080) < abs(($1.windowDurationMins ?? 10_080) - 10_080) }
+                : positionedSecondary
             updateStatus {
                 $0.rateLimits = BridgeRateLimits(
                     primary: primary,
@@ -684,7 +694,7 @@ private final class MiniAppServer {
 
     func initialize() throws {
         _ = try request(method: "initialize", params: [
-            "clientInfo": ["name": "codex-switchboard-bridge", "title": "Codex Switchboard Bridge", "version": "0.3.9"],
+            "clientInfo": ["name": "codex-switchboard-bridge", "title": "Codex Switchboard Bridge", "version": "0.4.0"],
             "capabilities": ["experimentalApi": true]
         ], timeout: 5)
         try write(["method": "initialized"])
